@@ -43,26 +43,15 @@ async def health_check():
 # Generate financial plan
 @app.post("/api/generate-plan")
 async def generate_plan(user_answers: UserAnswers):
-    import logging
-    logger = logging.getLogger(__name__)
-    
     try:
-        logger.info(f"=== Received generate-plan request ===")
-        logger.info(f"User answers: {user_answers.dict()}")
-        
         # Get relevant context from financial playbook using RAG
-        logger.info("Getting relevant context from RAG...")
         context = await get_relevant_context(user_answers.dict())
-        logger.info(f"Context retrieved: {len(context)} characters")
         
         # Generate financial plan using Gemini
-        logger.info("Generating financial plan with Gemini...")
         plan = await generate_financial_plan(user_answers.dict(), context)
-        logger.info("Plan generated successfully")
         
         return plan
     except Exception as error:
-        logger.error(f"Error generating plan: {error}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
