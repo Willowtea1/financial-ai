@@ -5,7 +5,7 @@ from typing import Optional, List, Dict
 import uvicorn
 import os
 from dotenv import load_dotenv
-from services.openai_service import generate_financial_plan, refine_financial_plan
+from services.gemini_service import generate_financial_plan, refine_financial_plan
 from services.rag_service import get_relevant_context
 
 load_dotenv()
@@ -43,16 +43,26 @@ async def health_check():
 # Generate financial plan
 @app.post("/api/generate-plan")
 async def generate_plan(user_answers: UserAnswers):
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
-        # Get relevant context from financial playbook using RAG
-        context = await get_relevant_context(user_answers.dict())
+        logger.info(f"=== Received generate-plan request ===")
+        logger.info(f"User answers: {user_answers.dict()}")
         
-        # Generate financial plan using OpenAI
+        # Get relevant context from financial playbook using RAG
+        logger.info("Getting relevant context from RAG...")
+        context = await get_relevant_context(user_answers.dict())
+        logger.info(f"Context retrieved: {len(context)} characters")
+        
+        # Generate financial plan using Gemini
+        logger.info("Generating financial plan with Gemini...")
         plan = await generate_financial_plan(user_answers.dict(), context)
+        logger.info("Plan generated successfully")
         
         return plan
     except Exception as error:
-        print(f"Error generating plan: {error}")
+        logger.error(f"Error generating plan: {error}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={

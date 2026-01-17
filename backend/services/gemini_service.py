@@ -4,17 +4,31 @@ import re
 import google.generativeai as genai
 from dotenv import load_dotenv
 from typing import Dict, List
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
 # Configure Gemini
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+api_key = os.getenv("GOOGLE_API_KEY")
+logger.info(f"GOOGLE_API_KEY present: {bool(api_key)}")
+if api_key:
+    logger.info(f"API key starts with: {api_key[:10]}...")
+genai.configure(api_key=api_key)
 
-# Initialize the model
-model = genai.GenerativeModel('gemini-3-flash-preview')
+# Initialize the model - using gemini-1.5-flash for better free tier limits
+model = genai.GenerativeModel('gemini-2.5-flash')
+logger.info("Gemini model initialized: gemini-2.5-flash")
 
 async def generate_financial_plan(user_answers: Dict, context: str):
     """Generate a personalized financial plan using Google Gemini."""
+    logger.info("=== Starting generate_financial_plan ===")
+    logger.info(f"User answers: {user_answers}")
+    logger.info(f"Context length: {len(context)} characters")
+    
     system_prompt = """You are a certified financial advisor with expertise in personal finance planning for Malaysian residents (RM currency). 
 Generate a comprehensive, actionable financial plan based on user responses and relevant financial guidance.
 
@@ -26,7 +40,7 @@ Your response must be a valid JSON object with the following structure:
   "thisMonthActions": "Specific actions to take this month (detailed and actionable)",
   "longTermStrategy": "Long-term financial strategy and goals (2-3 paragraphs)"
 }
-s
+
 Guidelines:
 - Use Malaysian Ringgit (RM) currency
 - Be specific and actionable
@@ -54,40 +68,63 @@ Return ONLY valid JSON, no markdown formatting or code blocks."""
     try:
         # Combine system and user prompts for Gemini
         full_prompt = f"{system_prompt}\n\n{user_prompt}"
+        logger.info(f"Prompt length: {len(full_prompt)} characters")
         
+        logger.info("Calling Gemini API...")
         response = model.generate_content(
             full_prompt,
             generation_config=genai.GenerationConfig(
                 temperature=0.7,
-                max_output_tokens=2000,
+                max_output_tokens=8000,  # Increased for complete JSON response
             )
         )
+        logger.info("Gemini API call completed")
 
         response_text = response.text.strip()
+        logger.info(f"Response length: {len(response_text)} characters")
+        
+        # Check if response was truncated
+        if hasattr(response, 'candidates') and response.candidates:
+            finish_reason = response.candidates[0].finish_reason
+            logger.info(f"Finish reason: {finish_reason}")
+            if finish_reason != 1:  # 1 = STOP (normal completion)
+                logger.warning(f"Response may be incomplete. Finish reason: {finish_reason}")
+        
+        logger.info(f"Response preview: {response_text[:500]}...")
+        logger.info(f"Response end: ...{response_text[-200:]}")
         
         # Remove markdown code blocks if present
         response_text = re.sub(r'^```json\s*', '', response_text)
         response_text = re.sub(r'^```\s*', '', response_text)
         response_text = re.sub(r'\s*```$', '', response_text)
         
+        logger.info("Parsing JSON response...")
         plan = json.loads(response_text)
+        logger.info("JSON parsed successfully")
 
         # Validate structure
         required_fields = ["situation", "priorities", "roadmap", "thisMonthActions", "longTermStrategy"]
         if not all(field in plan for field in required_fields):
-            raise ValueError("Invalid plan structure from Gemini")
+            missing = [f for f in required_fields if f not in plan]
+            logger.error(f"Missing fields: {missing}")
+            raise ValueError(f"Invalid plan structure from Gemini. Missing: {missing}")
 
+        logger.info("=== Plan generated successfully ===")
         return plan
     except json.JSONDecodeError as e:
-        print(f"JSON decode error: {e}")
-        print(f"Response text: {response_text}")
+        logger.error(f"JSON decode error: {e}")
+        logger.error(f"Response text: {response_text}")
         raise Exception(f"Failed to parse Gemini response: {str(e)}")
     except Exception as error:
-        print(f"Gemini API error: {error}")
+        logger.error(f"Gemini API error: {error}", exc_info=True)
         raise Exception(f"Failed to generate plan: {str(error)}")
 
 async def refine_financial_plan(message: str, plan_data: Dict, chat_history: List[Dict], context: str):
     """Refine financial plan through chat interaction using Google Gemini."""
+    logger.info("=== Starting refine_financial_plan ===")
+    logger.info(f"Message: {message}")
+    logger.info(f"Chat history length: {len(chat_history)}")
+    
     system_prompt = f"""You are a financial advisor assistant helping users refine their financial plan.
 You have access to their current financial plan and can answer questions, suggest improvements, or clarify aspects of their plan.
 
@@ -118,6 +155,7 @@ Relevant Financial Guidance:
     conversation += f"\nUSER: {message}\n\nASSISTANT:"
 
     try:
+        logger.info("Calling Gemini API for chat refinement...")
         response = model.generate_content(
             conversation,
             generation_config=genai.GenerationConfig(
@@ -125,8 +163,10 @@ Relevant Financial Guidance:
                 max_output_tokens=1500,
             )
         )
+        logger.info("Gemini API call completed")
 
         response_text = response.text
+        logger.info(f"Response length: {len(response_text)} characters")
 
         # Try to parse if response contains JSON (for plan updates)
         updated_plan = None
@@ -145,14 +185,16 @@ Relevant Financial Guidance:
                 plan_fields = ["situation", "priorities", "roadmap", "thisMonthActions", "longTermStrategy"]
                 if any(key in parsed for key in plan_fields):
                     updated_plan = {**plan_data, **parsed}
+                    logger.info("Plan updated from chat response")
         except (json.JSONDecodeError, Exception) as e:
             # Not JSON, just a text response
-            pass
+            logger.info("No JSON update in response")
 
+        logger.info("=== Chat refinement completed successfully ===")
         return {
             "message": response_text,
             "updatedPlan": updated_plan
         }
     except Exception as error:
-        print(f"Gemini API error: {error}")
+        logger.error(f"Gemini API error: {error}", exc_info=True)
         raise Exception(f"Failed to refine plan: {str(error)}")

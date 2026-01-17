@@ -4,6 +4,9 @@ from pathlib import Path
 from typing import Dict
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import logging
+
+logger = logging.getLogger(__name__)
 
 playbook_cache = None
 vectorizer = None
@@ -19,37 +22,36 @@ def load_playbook():
     try:
         current_dir = Path(__file__).parent
         playbook_path = current_dir.parent / "data" / "financial-playbook.md"
+        logger.info(f"Attempting to load playbook from: {playbook_path}")
+        
+        if not playbook_path.exists():
+            logger.warning(f"Playbook file not found at {playbook_path}")
+            return ""
+            
         with open(playbook_path, "r", encoding="utf-8") as f:
             playbook_cache = f.read()
+        logger.info(f"Playbook loaded successfully: {len(playbook_cache)} characters")
         return playbook_cache
     except Exception as error:
-        print(f"Error loading playbook: {error}")
+        logger.error(f"Error loading playbook: {error}")
         return ""
 
 def chunk_text(text: str, chunk_size: int = 1500, overlap: int = 300):
-    """Split text into overlapping chunks."""
+    """Split text into chunks by markdown sections."""
+    logger.info(f"Starting chunk_text with text length: {len(text)}")
+    
+    # Simple approach: split by ## headers
+    sections = text.split('\n## ')
     chunks = []
-    start = 0
-
-    while start < len(text):
-        end = min(start + chunk_size, len(text))
-        # Try to break at sentence boundaries
-        if end < len(text):
-            # Look for sentence endings near the chunk boundary
-            for punct in ['. ', '\n\n', '##']:
-                last_punct = text.rfind(punct, start, end)
-                if last_punct > start:
-                    end = last_punct + len(punct)
-                    break
-        
-        chunk = text[start:end].strip()
-        if chunk:
-            chunks.append(chunk)
-        
-        start = end - overlap
-        if start >= len(text):
-            break
-
+    
+    for i, section in enumerate(sections):
+        if i > 0:
+            section = '## ' + section  # Add back the header
+        section = section.strip()
+        if section:
+            chunks.append(section)
+    
+    logger.info(f"Chunking complete: created {len(chunks)} chunks")
     return chunks
 
 def initialize_vectorizer():
@@ -57,16 +59,21 @@ def initialize_vectorizer():
     global vectorizer, playbook_chunks, chunk_vectors
     
     if vectorizer is not None:
+        logger.info("Vectorizer already initialized")
         return  # Already initialized
     
+    logger.info("Initializing vectorizer...")
     playbook = load_playbook()
     if not playbook:
+        logger.warning("No playbook content loaded")
         return
     
     # Chunk the playbook
     playbook_chunks = chunk_text(playbook, chunk_size=1500, overlap=300)
+    logger.info(f"Created {len(playbook_chunks)} chunks from playbook")
     
     if not playbook_chunks:
+        logger.warning("No chunks created from playbook")
         return
     
     # Initialize TF-IDF vectorizer
@@ -81,8 +88,9 @@ def initialize_vectorizer():
     # Create embeddings for all chunks
     try:
         chunk_vectors = vectorizer.fit_transform(playbook_chunks)
+        logger.info(f"Vectorizer initialized successfully with {chunk_vectors.shape} vectors")
     except Exception as e:
-        print(f"Error creating vectors: {e}")
+        logger.error(f"Error creating vectors: {e}", exc_info=True)
         vectorizer = None
 
 def calculate_keyword_relevance(chunk: str, user_answers: Dict) -> float:
@@ -159,14 +167,18 @@ async def get_relevant_context(user_answers: Dict):
     """Get relevant context from playbook using RAG (TF-IDF + cosine similarity + keyword matching)."""
     global vectorizer, playbook_chunks, chunk_vectors
     
+    logger.info("Starting get_relevant_context")
+    
     # Initialize vectorizer if not already done
     initialize_vectorizer()
     
     if not playbook_chunks or vectorizer is None:
-        return "Standard financial planning guidance."
+        logger.warning("No playbook chunks or vectorizer available, returning default guidance")
+        return "Provide comprehensive financial planning advice based on Malaysian context, including EPF contributions, tax planning, and local investment options."
     
     # Create query from user answers
     query_text = create_query_vector(user_answers)
+    logger.info(f"Query text: {query_text}")
     
     try:
         # Vectorize the query
@@ -197,10 +209,11 @@ async def get_relevant_context(user_answers: Dict):
         # Combine top chunks
         context = "\n\n---\n\n".join(top_chunks)
         
+        logger.info(f"Context retrieved: {len(context)} characters from {len(top_chunks)} chunks")
         return context if context else "Standard financial planning guidance."
         
     except Exception as e:
-        print(f"Error in RAG retrieval: {e}")
+        logger.error(f"Error in RAG retrieval: {e}", exc_info=True)
         # Fallback to keyword-based retrieval
         scored_chunks = [
             (calculate_keyword_relevance(chunk, user_answers), chunk)
