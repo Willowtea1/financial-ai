@@ -19,37 +19,29 @@ def load_playbook():
     try:
         current_dir = Path(__file__).parent
         playbook_path = current_dir.parent / "data" / "financial-playbook.md"
+        
+        if not playbook_path.exists():
+            return ""
+            
         with open(playbook_path, "r", encoding="utf-8") as f:
             playbook_cache = f.read()
         return playbook_cache
     except Exception as error:
-        print(f"Error loading playbook: {error}")
         return ""
 
 def chunk_text(text: str, chunk_size: int = 1500, overlap: int = 300):
-    """Split text into overlapping chunks."""
+    """Split text into chunks by markdown sections."""
+    # Simple approach: split by ## headers
+    sections = text.split('\n## ')
     chunks = []
-    start = 0
-
-    while start < len(text):
-        end = min(start + chunk_size, len(text))
-        # Try to break at sentence boundaries
-        if end < len(text):
-            # Look for sentence endings near the chunk boundary
-            for punct in ['. ', '\n\n', '##']:
-                last_punct = text.rfind(punct, start, end)
-                if last_punct > start:
-                    end = last_punct + len(punct)
-                    break
-        
-        chunk = text[start:end].strip()
-        if chunk:
-            chunks.append(chunk)
-        
-        start = end - overlap
-        if start >= len(text):
-            break
-
+    
+    for i, section in enumerate(sections):
+        if i > 0:
+            section = '## ' + section  # Add back the header
+        section = section.strip()
+        if section:
+            chunks.append(section)
+    
     return chunks
 
 def initialize_vectorizer():
@@ -81,8 +73,7 @@ def initialize_vectorizer():
     # Create embeddings for all chunks
     try:
         chunk_vectors = vectorizer.fit_transform(playbook_chunks)
-    except Exception as e:
-        print(f"Error creating vectors: {e}")
+    except Exception:
         vectorizer = None
 
 def calculate_keyword_relevance(chunk: str, user_answers: Dict) -> float:
@@ -163,7 +154,7 @@ async def get_relevant_context(user_answers: Dict):
     initialize_vectorizer()
     
     if not playbook_chunks or vectorizer is None:
-        return "Standard financial planning guidance."
+        return "Provide comprehensive financial planning advice based on Malaysian context, including EPF contributions, tax planning, and local investment options."
     
     # Create query from user answers
     query_text = create_query_vector(user_answers)
@@ -199,8 +190,7 @@ async def get_relevant_context(user_answers: Dict):
         
         return context if context else "Standard financial planning guidance."
         
-    except Exception as e:
-        print(f"Error in RAG retrieval: {e}")
+    except Exception:
         # Fallback to keyword-based retrieval
         scored_chunks = [
             (calculate_keyword_relevance(chunk, user_answers), chunk)

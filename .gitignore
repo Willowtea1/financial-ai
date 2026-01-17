@@ -7,6 +7,9 @@ backend/node_modules
 
 # Python
 .venv
+venv/
+backend/venv/
+backend/env.
 __pycache__/
 *.py[cod]
 
