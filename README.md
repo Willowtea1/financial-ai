@@ -16,12 +16,12 @@ Users are experiencing financial paralysis caused by a fragmented landscape of d
 Financial GPS is an AI-powered financial planning platform that provides personalized, actionable financial roadmaps tailored to Malaysian residents. By combining an intuitive questionnaire with advanced RAG (Retrieval-Augmented Generation) technology, we deliver comprehensive financial plans in minutes—not weeks.
 
 **Key Features:**
-- 📋 Interactive card-based financial assessment
-- 📄 Document upload with Docling OCR for automatic data extraction
-- 🤖 AI-powered plan generation using Gemini 2.5 Flash
-- 📊 Comprehensive financial reports with actionable strategies
-- 💬 AI chat refinement for personalized guidance
-- 🎯 Malaysian-specific financial advice (EPF, ASB, etc.)
+- Interactive card-based financial assessment
+- Document upload with Docling OCR for automatic data extraction
+- AI-powered plan generation using Gemini 2.5 Flash
+- Comprehensive financial reports with actionable strategies
+- AI chat refinement for personalized guidance
+- Malaysian-specific financial advice (EPF, ASB, etc.)
 
 ## Tech Stack
 
@@ -151,17 +151,6 @@ Open your browser and navigate to:
 ```
 http://localhost:5173
 ```
-
-You should see the Financial GPS landing page. Click "Start My Financial Plan" to begin!
-
-## How It Works
-
-1. **Landing Page**: Users are greeted with a clear value proposition and CTA
-2. **Financial Assessment**: Interactive 6-section questionnaire covering income, expenses, debt, savings, and risk tolerance
-3. **Document Upload**: Users can upload financial documents (PDFs, images) which are processed using Docling OCR
-4. **AI Plan Generation**: RAG system retrieves relevant financial guidance and Gemini 2.5 Flash generates a personalized plan
-5. **Comprehensive Report**: Users receive a detailed financial roadmap with immediate actions and long-term strategies
-6. **AI Refinement**: Interactive chat allows users to ask questions and refine their plan
 
 ## Project Structure
 
