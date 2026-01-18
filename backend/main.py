@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 import uvicorn
@@ -9,7 +10,7 @@ import httpx
 from services.gemini_service import generate_financial_plan, refine_financial_plan
 from services.rag_service import get_relevant_context
 from services.content_extraction import extract_content, summarize_document
-from auth import get_current_user, get_supabase_client
+from auth import get_current_user, get_supabase_client, security
 from config import get_settings
 
 load_dotenv()
@@ -88,6 +89,31 @@ async def signout(current_user: dict = Depends(get_current_user)):
 async def get_user(current_user: dict = Depends(get_current_user)):
     """Get current authenticated user."""
     return current_user
+
+# Test endpoint to check auth
+@app.get("/api/auth/test")
+async def test_auth(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Test authentication without full verification."""
+    token = credentials.credentials
+    print(f"Received token (first 50 chars): {token[:50]}...")
+    
+    try:
+        # Try to decode without verification first
+        import jwt as pyjwt
+        unverified = pyjwt.decode(token, options={"verify_signature": False})
+        print(f"Unverified payload: {unverified}")
+        
+        # Now try with verification
+        settings = get_settings()
+        verified = pyjwt.decode(
+            token,
+            settings.supabase_jwt_secret,
+            algorithms=["HS256"],
+            audience="authenticated"
+        )
+        return {"status": "success", "payload": verified}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "type": type(e).__name__}
 
 # Generate financial plan (protected)
 @app.post("/api/generate-plan")
@@ -210,10 +236,13 @@ async def upload_files(
         settings = get_settings()
         worker_url = settings.worker_url
         
+        print(f"[UPLOAD] Starting upload for {len(files)} files")
+        
         # Store file contents for background extraction
         file_data_list = []
         
         # Validate all files first and store content
+        print("[UPLOAD] Step 1: Validating files...")
         for file in files:
             if not file.content_type:
                 raise HTTPException(
@@ -239,8 +268,11 @@ async def upload_files(
             # Reset file pointer for upload
             await file.seek(0)
         
+        print(f"[UPLOAD] Step 2: Uploading {len(files)} files to worker...")
+        
         # Upload files concurrently
         async def upload_single_file(file: UploadFile, file_data: dict):
+            print(f"[UPLOAD] Uploading {file.filename}...")
             file_content = file_data['content']
             
             # Prepare multipart form data for worker
@@ -248,12 +280,15 @@ async def upload_files(
                 'file': (file.filename, file_content, file.content_type)
             }
             
+            print(f"[UPLOAD] Sending {file.filename} to worker...")
             # Forward request to Cloudflare Worker
             async with httpx.AsyncClient(timeout=300.0) as client:
                 response = await client.post(
                     f"{worker_url}/upload",
                     files=files_data
                 )
+            
+            print(f"[UPLOAD] Worker response for {file.filename}: {response.status_code}")
             
             # Check if upload was successful
             if response.status_code != 200:
@@ -265,58 +300,89 @@ async def upload_files(
                 }
             
             result = response.json()
+            print(f"[UPLOAD] Worker returned: {result}")
             
+            # The worker might return different field names
+            # Use originalName if available, otherwise fall back to fileName or the original filename
+            file_url = result.get('url') or result.get('fileUrl') or result.get('publicUrl') or result.get('link')
+            file_name = result.get('originalName') or result.get('fileName') or result.get('filename') or file.filename
+            
+            if not file_url:
+                print(f"[UPLOAD] ERROR: No URL in worker response")
+                return {
+                    "success": False,
+                    "fileName": file.filename,
+                    "error": f"Worker did not return file URL"
+                }
+            
+            print(f"[UPLOAD] Saving to database...")
             # Save upload record to database
             document_id = None
             try:
                 supabase = get_supabase_client()
+                user_id = current_user['id']
+                
                 db_result = supabase.table('user_uploaded_documents').insert({
-                    'userId': current_user['id'],
-                    'fileName': result.get('fileName'),
-                    'fileUrl': result.get('url'),
+                    'userId': str(user_id),
+                    'fileName': file_name,
+                    'fileUrl': file_url,
                     'extractionStatus': 'pending'
                 }).execute()
                 
                 # Get the inserted document ID
                 if db_result.data and len(db_result.data) > 0:
                     document_id = db_result.data[0].get('id')
+                    print(f"[UPLOAD] Document saved with ID: {document_id}")
                 
             except Exception as db_error:
-                print(f"Failed to save to database: {str(db_error)}")
+                print(f"[UPLOAD] Database error: {db_error}")
+                return {
+                    "success": False,
+                    "fileName": file.filename,
+                    "error": f"Database error: {str(db_error)}"
+                }
             
             # Schedule background extraction if we have document_id
             if document_id:
-                background_tasks.add_task(
-                    extract_and_store_content,
-                    result.get('url'),
-                    result.get('fileName'),
-                    file_content,
-                    file.content_type,
-                    current_user['id'],
-                    document_id
-                )
+                try:
+                    background_tasks.add_task(
+                        extract_and_store_content,
+                        file_url,
+                        file_name,
+                        file_content,
+                        file.content_type,
+                        current_user['id'],
+                        document_id
+                    )
+                    print(f"[UPLOAD] Background task scheduled for doc {document_id}")
+                except Exception as bg_error:
+                    print(f"[UPLOAD] Failed to schedule background task: {bg_error}")
             
+            print(f"[UPLOAD] Completed {file.filename}")
             return {
                 "success": True,
-                "fileName": result.get('fileName'),
-                "fileUrl": result.get('url'),
+                "fileName": file_name,
+                "fileUrl": file_url,
                 "documentId": document_id,
                 "extractionStatus": "pending"
             }
         
         # Upload all files concurrently using asyncio.gather
         import asyncio
+        print("[UPLOAD] Step 3: Processing uploads concurrently...")
         results = await asyncio.gather(
             *[upload_single_file(file, file_data) for file, file_data in zip(files, file_data_list)],
             return_exceptions=True
         )
         
+        print("[UPLOAD] Step 4: Processing results...")
         # Process results
         successful_uploads = []
         failed_uploads = []
         
         for result in results:
             if isinstance(result, Exception):
+                print(f"[UPLOAD] Exception: {result}")
                 failed_uploads.append({
                     "success": False,
                     "error": str(result)
@@ -325,6 +391,8 @@ async def upload_files(
                 successful_uploads.append(result)
             else:
                 failed_uploads.append(result)
+        
+        print(f"[UPLOAD] Complete! Success: {len(successful_uploads)}, Failed: {len(failed_uploads)}")
         
         return {
             "successful": successful_uploads,

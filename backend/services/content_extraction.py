@@ -111,7 +111,7 @@ async def summarize_document(extracted_content: str, filename: str) -> str:
     try:
         settings = get_settings()
         genai.configure(api_key=settings.google_api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         # Create summarization prompt
         prompt = f"""
