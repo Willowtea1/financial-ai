@@ -468,6 +468,27 @@ async def stream_query(
             user_profile_summary = get_user_profile_summary(current_user.get('id'))
             print(f"[STREAM] User profile: {user_profile_summary[:100]}...")
             
+            # Get user's uploaded documents summaries
+            document_summaries = ""
+            try:
+                supabase = get_supabase_client()
+                docs_result = supabase.table('user_uploaded_documents')\
+                    .select('fileName, summary, extractionStatus')\
+                    .eq('userId', str(current_user.get('id')))\
+                    .eq('extractionStatus', 'completed')\
+                    .execute()
+                
+                if docs_result.data and len(docs_result.data) > 0:
+                    document_summaries = "\n\nUser's Financial Documents:\n"
+                    for doc in docs_result.data:
+                        if doc.get('summary'):
+                            document_summaries += f"\n- {doc['fileName']}:\n{doc['summary']}\n"
+                    print(f"[STREAM] Found {len(docs_result.data)} document summaries")
+                else:
+                    print("[STREAM] No document summaries found")
+            except Exception as doc_error:
+                print(f"[STREAM] Error fetching documents: {doc_error}")
+            
             # Get relevant context from RAG if no specific context provided
             rag_context = ""
             if request.context:
@@ -482,6 +503,8 @@ async def stream_query(
 You provide clear, actionable advice on financial planning, investments, retirement planning, and money management.
 
 {user_profile_summary}
+
+{document_summaries}
 
 IMPORTANT: You have access to powerful retirement planning tools that you SHOULD USE when relevant:
 
@@ -518,10 +541,13 @@ Guidelines:
 - Use Malaysian Ringgit (RM) currency
 - Be conversational and helpful
 - Provide specific, actionable advice tailored to the user's profile
+- Reference the user's uploaded financial documents when relevant
+- Consider both their questionnaire responses AND document data for comprehensive advice
 - Reference Malaysian financial context (EPF, KWSP, taxes, etc.) when relevant
 - Use the tools proactively to provide data-driven recommendations
 - Use markdown formatting for better readability
-- When presenting tool results, format them nicely with tables or lists"""
+- When presenting tool results, format them nicely with tables or lists
+- If you notice discrepancies between questionnaire data and documents, ask for clarification"""
 
             if rag_context:
                 system_prompt += f"\n\nRelevant Financial Guidance:\n{rag_context}"

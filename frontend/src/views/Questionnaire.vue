@@ -1,11 +1,11 @@
 <template>
   <div class="questionnaire-wrapper">
-    <Questionnaire />
+    <QuestionnaireNew />
   </div>
 </template>
 
 <script setup>
-import Questionnaire from '../components/Questionnaire.vue'
+import QuestionnaireNew from '../components/QuestionnaireNew.vue'
 </script>
 
 <style scoped>
