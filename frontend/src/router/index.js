@@ -4,6 +4,7 @@ import Questionnaire from '../views/Questionnaire.vue'
 import FinancialPlan from '../views/FinancialPlan.vue'
 import TestUpload from '../views/TestUpload.vue'
 import RetirementPlanning from '../views/RetirementPlanning.vue'
+import Chatbot from '../views/Chatbot.vue'
 
 const routes = [
   {
@@ -31,6 +32,11 @@ const routes = [
     path: '/retirement',
     name: 'RetirementPlanning',
     component: RetirementPlanning
+  },
+  {
+    path: '/chatbot',
+    name: 'Chatbot',
+    component: Chatbot
   },
 ]
 

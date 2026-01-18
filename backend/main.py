@@ -1,12 +1,16 @@
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 import uvicorn
 import os
 from dotenv import load_dotenv
 import httpx
+import json
+import traceback
+import google.generativeai as genai
 from services.gemini_service import generate_financial_plan, refine_financial_plan
 from services.rag_service import get_relevant_context
 from services.content_extraction import extract_content, summarize_document
@@ -22,6 +26,10 @@ from auth import get_current_user, get_supabase_client, security
 from config import get_settings
 
 load_dotenv()
+
+# Configure Gemini for streaming
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 app = FastAPI(title="Financial GPS API", version="1.0.0")
 
@@ -72,6 +80,11 @@ class InvestmentOrderRequest(BaseModel):
     product_id: str
     amount: float
     payment_method: Optional[str] = "online_banking"
+
+class QueryRequest(BaseModel):
+    query: str
+    chat_history: Optional[List[Dict]] = []
+    context: Optional[Dict] = None
 
 # Health check
 @app.get("/api/health")
@@ -356,6 +369,217 @@ async def create_order_endpoint(
                 "message": str(error)
             }
         )
+
+# ============================================================================
+# STREAMING QUERY ENDPOINT
+# ============================================================================
+
+@app.post("/api/query")
+async def stream_query(
+    request: QueryRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Stream AI responses to user queries in real-time with function calling support.
+    Supports chat history, context, and can use retirement planning tools.
+    """
+    print("\n" + "="*80)
+    print("[STREAM QUERY] New request received")
+    print(f"[STREAM QUERY] User ID: {current_user.get('id', 'unknown')}")
+    print(f"[STREAM QUERY] Query: {request.query[:100]}...")
+    print(f"[STREAM QUERY] Chat history length: {len(request.chat_history) if request.chat_history else 0}")
+    print(f"[STREAM QUERY] Context provided: {bool(request.context)}")
+    print("="*80 + "\n")
+    
+    async def generate_stream():
+        try:
+            print("[STREAM] Starting stream generation with function calling...")
+            
+            # Get relevant context from RAG if no specific context provided
+            rag_context = ""
+            if request.context:
+                print(f"[STREAM] Fetching RAG context for: {request.context}")
+                rag_context = await get_relevant_context(request.context)
+                print(f"[STREAM] RAG context length: {len(rag_context)} chars")
+            else:
+                print("[STREAM] No context provided, skipping RAG")
+            
+            # Build the conversation prompt with tool instructions
+            system_prompt = """You are a knowledgeable financial advisor assistant specializing in Malaysian personal finance.
+You provide clear, actionable advice on financial planning, investments, retirement planning, and money management.
+
+IMPORTANT: You have access to powerful retirement planning tools that you SHOULD USE when relevant:
+
+1. **get_investment_options**: Find suitable investment products based on risk tolerance, amount, and time horizon
+   - Use when users ask about investment options, what to invest in, or need recommendations
+   
+2. **compare_investments**: Compare multiple investment products side by side
+   - Use when users want to compare different investment options
+   
+3. **calculate_retirement_projection**: Calculate retirement savings projections with future value
+   - Use when users ask about retirement planning, how much they'll have, or need projections
+   
+4. **get_product_details**: Get detailed information about specific investment products
+   - Use when users ask about a specific product or want more details
+   
+5. **create_investment_order**: Help users purchase investments (use carefully, confirm intent first)
+   - Use when users explicitly want to invest or purchase a product
+
+WHEN TO USE TOOLS:
+- User asks "What should I invest in?" → Use get_investment_options
+- User asks "How much will I have at retirement?" → Use calculate_retirement_projection
+- User mentions age, savings, monthly amount → Proactively use calculate_retirement_projection
+- User asks about specific products → Use get_product_details
+- User wants to compare options → Use compare_investments
+
+IMPORTANT: When you use a tool, explain what you're doing and present the results clearly.
+
+Guidelines:
+- Use Malaysian Ringgit (RM) currency
+- Be conversational and helpful
+- Provide specific, actionable advice
+- Reference Malaysian financial context (EPF, KWSP, taxes, etc.) when relevant
+- Use the tools proactively to provide data-driven recommendations
+- Use markdown formatting for better readability
+- When presenting tool results, format them nicely with tables or lists"""
+
+            if rag_context:
+                system_prompt += f"\n\nRelevant Financial Guidance:\n{rag_context}"
+
+            # Build conversation history
+            conversation_parts = [system_prompt]
+            
+            # Add chat history (last 10 messages)
+            recent_history = request.chat_history[-10:] if request.chat_history else []
+            print(f"[STREAM] Adding {len(recent_history)} messages from history")
+            for msg in recent_history:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                conversation_parts.append(f"{role.upper()}: {content}")
+            
+            # Add current query
+            conversation_parts.append(f"USER: {request.query}")
+            conversation_parts.append("ASSISTANT:")
+            
+            conversation = "\n\n".join(conversation_parts)
+            print(f"[STREAM] Total conversation length: {len(conversation)} chars")
+
+            # Import the tool-enabled model from gemini_service
+            from services.gemini_service import model as tool_model, execute_tool
+            
+            print("[STREAM] Starting chat with function calling enabled...")
+            chat = tool_model.start_chat(enable_automatic_function_calling=False)
+            
+            # Send initial message
+            response = chat.send_message(
+                conversation,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.7,
+                    max_output_tokens=2000,
+                ),
+                stream=True
+            )
+            
+            print("[STREAM] Processing response chunks...")
+            chunk_count = 0
+            total_chars = 0
+            
+            # Process streaming response
+            for chunk in response:
+                # Check for function calls
+                if chunk.candidates and len(chunk.candidates) > 0:
+                    candidate = chunk.candidates[0]
+                    if candidate.content and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            # Handle function call
+                            if hasattr(part, 'function_call') and part.function_call:
+                                function_call = part.function_call
+                                tool_name = function_call.name
+                                
+                                # Extract parameters
+                                parameters = {}
+                                for key, value in function_call.args.items():
+                                    parameters[key] = value
+                                
+                                # Add user_id if the tool needs it
+                                if tool_name == "create_investment_order":
+                                    parameters["user_id"] = current_user.get('id')
+                                
+                                print(f"[STREAM TOOL CALL] {tool_name} with params: {parameters}")
+                                
+                                # Send tool call notification to client
+                                tool_msg = f"\n\n🔧 *Using tool: {tool_name}*\n\n"
+                                data = json.dumps({"content": tool_msg})
+                                yield f"data: {data}\n\n"
+                                
+                                # Execute the tool
+                                tool_result = execute_tool(tool_name, parameters)
+                                print(f"[STREAM TOOL RESULT] {str(tool_result)[:200]}...")
+                                
+                                # Send tool result back to model and continue streaming
+                                follow_up = chat.send_message(
+                                    genai.protos.Content(
+                                        parts=[genai.protos.Part(
+                                            function_response=genai.protos.FunctionResponse(
+                                                name=tool_name,
+                                                response={"result": tool_result}
+                                            )
+                                        )]
+                                    ),
+                                    stream=True
+                                )
+                                
+                                # Stream the follow-up response
+                                for follow_chunk in follow_up:
+                                    if follow_chunk.text:
+                                        chunk_count += 1
+                                        total_chars += len(follow_chunk.text)
+                                        if chunk_count <= 3:
+                                            print(f"[STREAM] Chunk {chunk_count}: {follow_chunk.text[:50]}...")
+                                        
+                                        data = json.dumps({"content": follow_chunk.text})
+                                        yield f"data: {data}\n\n"
+                            
+                            # Handle regular text
+                            elif hasattr(part, 'text') and part.text:
+                                chunk_count += 1
+                                total_chars += len(part.text)
+                                if chunk_count <= 3:
+                                    print(f"[STREAM] Chunk {chunk_count}: {part.text[:50]}...")
+                                elif chunk_count % 10 == 0:
+                                    print(f"[STREAM] Chunk {chunk_count} (total chars: {total_chars})")
+                                
+                                data = json.dumps({"content": part.text})
+                                yield f"data: {data}\n\n"
+            
+            print(f"[STREAM] Streaming complete! Total chunks: {chunk_count}, Total chars: {total_chars}")
+            
+            # Send completion signal
+            yield f"data: {json.dumps({'done': True})}\n\n"
+            print("[STREAM] Sent completion signal")
+
+        except Exception as error:
+            print(f"[STREAM ERROR] Exception occurred: {error}")
+            print(f"[STREAM ERROR] Error type: {type(error).__name__}")
+            print(f"[STREAM ERROR] Traceback:\n{traceback.format_exc()}")
+            
+            error_data = json.dumps({
+                "error": str(error),
+                "done": True
+            })
+            yield f"data: {error_data}\n\n"
+            print("[STREAM ERROR] Sent error to client")
+
+    print("[STREAM] Returning StreamingResponse...")
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 # ============================================================================
 # FILE UPLOAD ENDPOINTS

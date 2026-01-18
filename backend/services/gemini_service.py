@@ -97,7 +97,7 @@ retirement_tools = genai.protos.Tool(
 
 # Initialize the model with tools
 model = genai.GenerativeModel(
-    'gemini-2.0-flash-exp',
+    'gemini-2.',
     tools=[retirement_tools]
 )
 
