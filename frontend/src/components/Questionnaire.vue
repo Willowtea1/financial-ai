@@ -78,7 +78,6 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
 
 const router = useRouter()
 
@@ -115,13 +114,15 @@ const isFormComplete = computed(() =>
 
 const generatePlan = async () => {
   if (!isFormComplete.value) return
-  try {
-    const response = await axios.post('/api/generate-plan', formData.value)
-    sessionStorage.setItem('financialPlan', JSON.stringify(response.data))
-    router.push({ name: 'FinancialPlan' })
-  } catch (e) {
-    alert('Failed to generate plan. Please try again.')
-  }
+  
+  // Save questionnaire data to localStorage
+  localStorage.setItem('questionnaire_data', JSON.stringify(formData.value))
+  
+  // Mark questionnaire as completed
+  localStorage.setItem('questionnaire_completed', 'true')
+  
+  // Redirect to chatbot
+  router.push({ name: 'Chatbot' })
 }
 </script>
 
