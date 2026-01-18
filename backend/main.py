@@ -150,80 +150,113 @@ async def refine_plan(
             }
         )
 
-# Upload file to Cloudflare Worker (protected)
+# Upload files to Cloudflare Worker (protected)
 @app.post("/api/upload")
-async def upload_file(
-    file: UploadFile = File(...),
-    compress: bool = Form(False),
+async def upload_files(
+    files: List[UploadFile] = File(...),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Upload user documents to R2 storage via Cloudflare Worker.
-    Supports images and videos with optional compression.
+    Supports multiple files (max 10MB each) uploaded concurrently.
     """
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB in bytes
+    
     try:
         settings = get_settings()
         worker_url = settings.worker_url
         
-        # Validate file type
-        if not file.content_type:
-            raise HTTPException(
-                status_code=400,
-                detail="File type could not be determined"
-            )
+        # Validate all files first
+        for file in files:
+            if not file.content_type:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File type could not be determined for {file.filename}"
+                )
+            
+            # Read file to check size
+            file_content = await file.read()
+            if len(file_content) > MAX_FILE_SIZE:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File {file.filename} exceeds 10MB limit"
+                )
+            # Reset file pointer for later use
+            await file.seek(0)
         
-        is_image = file.content_type.startswith('image/')
-        is_video = file.content_type.startswith('video/')
+        # Upload files concurrently
+        async def upload_single_file(file: UploadFile):
+            file_content = await file.read()
+            
+            # Prepare multipart form data for worker
+            files_data = {
+                'file': (file.filename, file_content, file.content_type)
+            }
+            
+            # Forward request to Cloudflare Worker
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                response = await client.post(
+                    f"{worker_url}/upload",
+                    files=files_data
+                )
+            
+            # Check if upload was successful
+            if response.status_code != 200:
+                error_data = response.json() if response.headers.get('content-type') == 'application/json' else {}
+                return {
+                    "success": False,
+                    "fileName": file.filename,
+                    "error": error_data.get('error', 'Upload to worker failed')
+                }
+            
+            result = response.json()
+            
+            # Save upload record to database
+            try:
+                supabase = get_supabase_client()
+                supabase.table('user_uploaded_documents').insert({
+                    'userId': current_user['id'],
+                    'fileName': result.get('fileName'),
+                    'fileUrl': result.get('url')
+                }).execute()
+            except Exception as db_error:
+                print(f"Failed to save to database: {str(db_error)}")
+            
+            return {
+                "success": True,
+                "fileName": result.get('fileName'),
+                "fileUrl": result.get('url')
+            }
         
-        if not is_image and not is_video:
-            raise HTTPException(
-                status_code=400,
-                detail="Only image and video files are allowed"
-            )
+        # Upload all files concurrently using asyncio.gather
+        import asyncio
+        results = await asyncio.gather(
+            *[upload_single_file(file) for file in files],
+            return_exceptions=True
+        )
         
-        # Read file content
-        file_content = await file.read()
+        # Process results
+        successful_uploads = []
+        failed_uploads = []
         
-        # Prepare multipart form data for worker
-        files = {
-            'file': (file.filename, file_content, file.content_type)
+        for result in results:
+            if isinstance(result, Exception):
+                failed_uploads.append({
+                    "success": False,
+                    "error": str(result)
+                })
+            elif result.get("success"):
+                successful_uploads.append(result)
+            else:
+                failed_uploads.append(result)
+        
+        return {
+            "successful": successful_uploads,
+            "failed": failed_uploads,
+            "total": len(files),
+            "successCount": len(successful_uploads),
+            "failedCount": len(failed_uploads)
         }
-        data = {
-            'compress': str(compress).lower()
-        }
-        
-        # Forward request to Cloudflare Worker
-        async with httpx.AsyncClient(timeout=300.0) as client:
-            response = await client.post(
-                f"{worker_url}/upload",
-                files=files,
-                data=data
-            )
-        
-        # Check if upload was successful
-        if response.status_code != 200:
-            error_data = response.json() if response.headers.get('content-type') == 'application/json' else {}
-            raise HTTPException(
-                status_code=response.status_code,
-                detail=error_data.get('error', 'Upload to worker failed')
-            )
-        
-        result = response.json()
-        
-        # Save upload record to database
-        try:
-            supabase = get_supabase_client()
-            supabase.table('user_uploaded_documents').insert({
-                'userId': current_user['id'],
-                'fileName': result.get('fileName'),
-                'fileUrl': result.get('url')
-            }).execute()
-        except Exception as db_error:
-            # Log error but continue - upload was successful
-            print(f"Failed to save to database: {str(db_error)}")
-            pass
-        
-        return result
         
     except HTTPException:
         raise
@@ -231,7 +264,7 @@ async def upload_file(
         raise HTTPException(
             status_code=500,
             detail={
-                "error": "Failed to upload file",
+                "error": "Failed to upload files",
                 "message": str(error)
             }
         )
