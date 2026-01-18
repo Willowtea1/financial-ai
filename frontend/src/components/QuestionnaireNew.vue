@@ -6,7 +6,7 @@
         Financial Profile Setup
       </v-app-bar-title>
       <v-spacer></v-spacer>
-      <v-chip color="white" text-color="primary" variant="flat">
+      <v-chip color="white" text-color="primary" variant="flat" class="ma-2">
         Step {{ currentStep }} of {{ totalSteps }}
       </v-chip>
     </v-app-bar>
@@ -644,5 +644,10 @@ const saveProfile = async () => {
 
 :deep(.v-stepper-item__avatar) {
   margin: 0 auto 8px;
+}
+
+:deep(.v-stepper-item__avatar) {
+  margin-left: 0 !important;
+  padding-left: 0 !important;
 }
 </style>

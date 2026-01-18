@@ -311,6 +311,9 @@ const handleStart = async () => {
 
 /* CTA Button */
 .cta-button {
+  display: inline-flex !important; /* ensure it's flex */
+  align-items: center !important;  /* vertical centering */
+  justify-content: center !important; /* horizontal centering */
   background: white !important;
   color: #667eea !important;
   border-radius: 16px !important;
@@ -322,6 +325,7 @@ const handleStart = async () => {
   transition: all 0.3s ease !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
 }
+
 
 .cta-button:hover {
   transform: translateY(-2px);
