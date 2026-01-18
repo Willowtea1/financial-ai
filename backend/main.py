@@ -210,20 +210,18 @@ async def upload_file(
         
         result = response.json()
         
-        # Optionally save upload record to database
+        # Save upload record to database
         try:
             supabase = get_supabase_client()
-            supabase.table('user_uploads').insert({
-                'user_id': current_user['id'],
-                'file_name': result.get('fileName'),
-                'original_name': result.get('originalName'),
-                'file_url': result.get('url'),
-                'file_size': result.get('size'),
-                'file_type': file.content_type,
-                'compressed': result.get('compressed', False)
+            supabase.table('user_uploaded_documents').insert({
+                'userId': current_user['id'],
+                'fileName': result.get('fileName'),
+                'fileUrl': result.get('url')
             }).execute()
-        except Exception:
-            pass  # Continue even if database save fails
+        except Exception as db_error:
+            # Log error but continue - upload was successful
+            print(f"Failed to save to database: {str(db_error)}")
+            pass
         
         return result
         
