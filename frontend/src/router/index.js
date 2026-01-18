@@ -3,6 +3,7 @@ import LandingPage from '../views/LandingPage.vue'
 import Questionnaire from '../views/Questionnaire.vue'
 import FinancialPlan from '../views/FinancialPlan.vue'
 import TestUpload from '../views/TestUpload.vue'
+import RetirementPlanning from '../views/RetirementPlanning.vue'
 
 const routes = [
   {
@@ -25,7 +26,12 @@ const routes = [
     path: '/test-upload',
     name: 'TestUpload',
     component: TestUpload
-  }
+  },
+  {
+    path: '/retirement',
+    name: 'RetirementPlanning',
+    component: RetirementPlanning
+  },
 ]
 
 const router = createRouter({

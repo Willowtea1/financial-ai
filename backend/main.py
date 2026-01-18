@@ -10,6 +10,14 @@ import httpx
 from services.gemini_service import generate_financial_plan, refine_financial_plan
 from services.rag_service import get_relevant_context
 from services.content_extraction import extract_content, summarize_document
+from services.retirement_tools import (
+    get_investment_options,
+    compare_investments,
+    calculate_retirement_projection,
+    get_product_details,
+    create_investment_order,
+    INVESTMENT_PRODUCTS
+)
 from auth import get_current_user, get_supabase_client, security
 from config import get_settings
 
@@ -42,6 +50,28 @@ class RefinePlanRequest(BaseModel):
 
 class GoogleAuthRequest(BaseModel):
     id_token: str
+
+class InvestmentOptionsRequest(BaseModel):
+    risk_tolerance: str
+    investment_amount: float
+    time_horizon: int
+    goals: Optional[List[str]] = None
+
+class CompareInvestmentsRequest(BaseModel):
+    product_ids: List[str]
+
+class RetirementProjectionRequest(BaseModel):
+    current_age: int
+    retirement_age: int
+    current_savings: float
+    monthly_contribution: float
+    expected_return: float
+    inflation_rate: Optional[float] = 3.0
+
+class InvestmentOrderRequest(BaseModel):
+    product_id: str
+    amount: float
+    payment_method: Optional[str] = "online_banking"
 
 # Health check
 @app.get("/api/health")
@@ -176,6 +206,160 @@ async def refine_plan(
                 "message": str(error)
             }
         )
+
+# ============================================================================
+# RETIREMENT PLANNING TOOLS ENDPOINTS
+# ============================================================================
+
+@app.get("/api/retirement/products")
+async def list_investment_products(current_user: dict = Depends(get_current_user)):
+    """List all available investment products."""
+    return {
+        "products": list(INVESTMENT_PRODUCTS.values()),
+        "total": len(INVESTMENT_PRODUCTS)
+    }
+
+@app.post("/api/retirement/investment-options")
+async def get_investment_options_endpoint(
+    request: InvestmentOptionsRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get personalized investment options based on user criteria."""
+    try:
+        result = get_investment_options(
+            risk_tolerance=request.risk_tolerance,
+            investment_amount=request.investment_amount,
+            time_horizon=request.time_horizon,
+            goals=request.goals
+        )
+        return result
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Failed to get investment options",
+                "message": str(error)
+            }
+        )
+
+@app.post("/api/retirement/compare")
+async def compare_investments_endpoint(
+    request: CompareInvestmentsRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Compare multiple investment products."""
+    try:
+        result = compare_investments(request.product_ids)
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result)
+        return result
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Failed to compare investments",
+                "message": str(error)
+            }
+        )
+
+@app.post("/api/retirement/projection")
+async def calculate_projection_endpoint(
+    request: RetirementProjectionRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Calculate retirement savings projection."""
+    try:
+        result = calculate_retirement_projection(
+            current_age=request.current_age,
+            retirement_age=request.retirement_age,
+            current_savings=request.current_savings,
+            monthly_contribution=request.monthly_contribution,
+            expected_return=request.expected_return,
+            inflation_rate=request.inflation_rate
+        )
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result)
+        return result
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Failed to calculate projection",
+                "message": str(error)
+            }
+        )
+
+@app.get("/api/retirement/product/{product_id}")
+async def get_product_details_endpoint(
+    product_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get detailed information about a specific investment product."""
+    try:
+        result = get_product_details(product_id)
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result)
+        return result
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Failed to get product details",
+                "message": str(error)
+            }
+        )
+
+@app.post("/api/retirement/order")
+async def create_order_endpoint(
+    request: InvestmentOrderRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create an investment purchase order."""
+    try:
+        result = create_investment_order(
+            product_id=request.product_id,
+            amount=request.amount,
+            user_id=current_user['id'],
+            payment_method=request.payment_method
+        )
+        if not result.get("success", False):
+            raise HTTPException(status_code=400, detail=result)
+        
+        # Optionally save order to database
+        try:
+            supabase = get_supabase_client()
+            supabase.table('investment_orders').insert({
+                'user_id': current_user['id'],
+                'order_id': result['order_id'],
+                'product_id': request.product_id,
+                'amount': request.amount,
+                'status': result['status'],
+                'order_data': result
+            }).execute()
+        except Exception:
+            pass  # Continue even if save fails
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Failed to create order",
+                "message": str(error)
+            }
+        )
+
+# ============================================================================
+# FILE UPLOAD ENDPOINTS
+# ============================================================================
 
 # Background task to extract content from uploaded file
 async def extract_and_store_content(
