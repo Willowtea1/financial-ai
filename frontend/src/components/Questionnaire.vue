@@ -7,6 +7,15 @@
         <p class="text-body-large text-medium-emphasis text-white">
           Select options that best describe your financial situation
         </p>
+        <v-chip
+          v-if="isFormComplete"
+          color="success"
+          variant="flat"
+          class="mt-2"
+          prepend-icon="mdi-check-circle"
+        >
+          All sections completed
+        </v-chip>
       </v-col>
     </v-row>
 
@@ -57,27 +66,77 @@
     </v-row>
 
     <!-- Generate Button -->
-    <v-btn
-      size="x-large"
-      color="primary"
-      :disabled="!isFormComplete"
-      @click="generatePlan"
-      class="generate-button floating-btn"
-      elevation="8"
-      rounded="xl"
+    <div class="save-section">
+      <v-card
+        v-if="isFormComplete && !isSaving && !saveSuccess"
+        class="info-card mb-4"
+        color="rgba(255, 255, 255, 0.1)"
+        variant="flat"
+      >
+        <v-card-text class="text-center text-white">
+          <v-icon color="info" size="32" class="mb-2">mdi-information</v-icon>
+          <p class="text-body-1 mb-0">
+            Your profile will be securely saved and used to provide personalized financial advice
+          </p>
+        </v-card-text>
+      </v-card>
+
+      <v-btn
+        size="x-large"
+        color="primary"
+        :disabled="!isFormComplete || isSaving"
+        :loading="isSaving"
+        @click="saveProfile"
+        class="generate-button floating-btn"
+        elevation="8"
+        rounded="xl"
+      >
+        <v-icon start size="28">
+          {{ saveSuccess ? 'mdi-check-circle' : 'mdi-content-save' }}
+        </v-icon>
+        {{ saveSuccess ? 'Saved! Redirecting...' : isSaving ? 'Saving Profile...' : 'Save & Continue to Chat' }}
+        <v-tooltip activator="parent" location="top" v-if="!isFormComplete && !isSaving">
+          Please complete all sections
+        </v-tooltip>
+      </v-btn>
+    </div>
+
+    <!-- Success Snackbar -->
+    <v-snackbar
+      v-model="saveSuccess"
+      color="success"
+      timeout="2000"
+      location="top"
     >
-      <v-icon start size="28">mdi-rocket-launch</v-icon>
-      Generate My Financial Plan
-      <v-tooltip activator="parent" location="top" v-if="!isFormComplete">
-        Please complete all sections
-      </v-tooltip>
-    </v-btn>
+      <v-icon start>mdi-check-circle</v-icon>
+      Profile saved successfully! Redirecting to chat...
+    </v-snackbar>
+
+    <!-- Error Snackbar -->
+    <v-snackbar
+      v-model="showErrorSnackbar"
+      color="error"
+      timeout="5000"
+      location="top"
+    >
+      <v-icon start>mdi-alert-circle</v-icon>
+      {{ saveError }}
+      <template v-slot:actions>
+        <v-btn
+          variant="text"
+          @click="saveError = null"
+        >
+          Close
+        </v-btn>
+      </template>
+    </v-snackbar>
   </v-container>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { authenticatedFetch } from '../utils/auth'
 
 const router = useRouter()
 
@@ -112,17 +171,61 @@ const isFormComplete = computed(() =>
   Object.values(formData.value).every((v) => v !== null && v !== undefined)
 )
 
-const generatePlan = async () => {
+// Loading and status states
+const isSaving = ref(false)
+const saveError = ref(null)
+const saveSuccess = ref(false)
+
+// Computed property for error snackbar visibility
+const showErrorSnackbar = computed({
+  get: () => !!saveError.value,
+  set: (value) => {
+    if (!value) saveError.value = null
+  }
+})
+
+const saveProfile = async () => {
   if (!isFormComplete.value) return
   
-  // Save questionnaire data to localStorage
-  localStorage.setItem('questionnaire_data', JSON.stringify(formData.value))
+  isSaving.value = true
+  saveError.value = null
+  saveSuccess.value = false
   
-  // Mark questionnaire as completed
-  localStorage.setItem('questionnaire_completed', 'true')
-  
-  // Redirect to chatbot
-  router.push({ name: 'Chatbot' })
+  try {
+    // Get API base URL from environment
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+    
+    // Use authenticated fetch utility
+    const response = await authenticatedFetch(`${apiBaseUrl}/api/profile`, {
+      method: 'POST',
+      body: JSON.stringify(formData.value)
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.message || 'Failed to save profile')
+    }
+    
+    const result = await response.json()
+    console.log('Profile saved successfully:', result)
+    
+    // Save to localStorage as backup
+    localStorage.setItem('questionnaire_data', JSON.stringify(formData.value))
+    localStorage.setItem('questionnaire_completed', 'true')
+    
+    // Show success message
+    saveSuccess.value = true
+    
+    // Wait 1.5 seconds to show success message, then redirect
+    setTimeout(() => {
+      router.push({ name: 'Chatbot' })
+    }, 1500)
+    
+  } catch (error) {
+    console.error('Error saving profile:', error)
+    saveError.value = error.message || 'Failed to save profile. Please try again.'
+    isSaving.value = false
+  }
 }
 </script>
 
@@ -190,11 +293,25 @@ const generatePlan = async () => {
   box-shadow: 0 4px 12px rgba(var(--v-theme-primary), 0.4);
 }
 
-.floating-btn {
+.save-section {
   position: fixed;
   bottom: 24px;
   right: 24px;
+  left: 24px;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: 500px;
+  margin-left: auto;
+}
+
+.info-card {
+  width: 100%;
+  backdrop-filter: blur(10px);
+}
+
+.floating-btn {
   min-width: 280px;
   font-weight: 600;
   letter-spacing: 0.5px;
@@ -207,12 +324,17 @@ const generatePlan = async () => {
 }
 
 @media (max-width: 600px) {
+  .save-section {
+    right: 16px;
+    left: 16px;
+    bottom: 16px;
+  }
+
   .floating-btn {
     min-width: auto;
+    width: 100%;
     padding: 0 16px;
     font-size: 0.875rem;
-    right: 16px;
-    bottom: 16px;
   }
 }
 </style>

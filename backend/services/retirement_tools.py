@@ -7,6 +7,7 @@ import os
 from typing import Dict, List, Optional
 from datetime import datetime
 import json
+from services.user_profile_service import get_user_financial_profile
 
 # Mock data for investment products (in production, this would come from a real API)
 INVESTMENT_PRODUCTS = {
@@ -583,6 +584,20 @@ RETIREMENT_TOOLS = [
             },
             "required": ["product_id", "amount", "user_id"]
         }
+    },
+    {
+        "name": "get_user_financial_profile",
+        "description": "Retrieve the user's financial profile from their questionnaire responses. Returns occupation, income, expenses, debt, savings, risk tolerance, and personalized analysis including monthly savings capacity and recommendations. Use this to provide personalized advice based on their actual financial situation.",
+        "parameters": {
+            "type_": "OBJECT",
+            "properties": {
+                "user_id": {
+                    "type_": "STRING",
+                    "description": "User identifier"
+                }
+            },
+            "required": ["user_id"]
+        }
     }
 ]
 
@@ -593,7 +608,8 @@ TOOL_FUNCTIONS = {
     "compare_investments": compare_investments,
     "calculate_retirement_projection": calculate_retirement_projection,
     "get_product_details": get_product_details,
-    "create_investment_order": create_investment_order
+    "create_investment_order": create_investment_order,
+    "get_user_financial_profile": get_user_financial_profile
 }
 
 
