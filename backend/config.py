@@ -8,9 +8,11 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_key: str
     supabase_jwt_secret: str
+    worker_url: str
     
     class Config:
         env_file = ".env"
+        extra = "ignore"  # Ignore extra fields in .env
 
 
 @lru_cache()
