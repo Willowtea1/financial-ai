@@ -22,6 +22,13 @@ from services.retirement_tools import (
     create_investment_order,
     INVESTMENT_PRODUCTS
 )
+from services.user_profile_service import (
+    save_user_profile,
+    get_user_profile,
+    get_user_profile_summary,
+    get_user_financial_profile,
+    delete_user_profile
+)
 from auth import get_current_user, get_supabase_client, security
 from config import get_settings
 
@@ -158,6 +165,65 @@ async def test_auth(credentials: HTTPAuthorizationCredentials = Depends(security
     except Exception as e:
         return {"status": "error", "message": str(e), "type": type(e).__name__}
 
+# ============================================================================
+# USER PROFILE ENDPOINTS
+# ============================================================================
+
+@app.post("/api/profile")
+async def save_profile(
+    user_answers: UserAnswers,
+    current_user: dict = Depends(get_current_user)
+):
+    """Save or update user profile from questionnaire."""
+    try:
+        result = save_user_profile(current_user['id'], user_answers.dict())
+        return result
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Failed to save profile",
+                "message": str(error)
+            }
+        )
+
+@app.get("/api/profile")
+async def get_profile(current_user: dict = Depends(get_current_user)):
+    """Get current user's profile."""
+    try:
+        profile = get_user_profile(current_user['id'])
+        if profile:
+            return {"success": True, "profile": profile}
+        else:
+            return {"success": False, "message": "Profile not found"}
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Failed to retrieve profile",
+                "message": str(error)
+            }
+        )
+
+@app.delete("/api/profile")
+async def delete_profile(current_user: dict = Depends(get_current_user)):
+    """Delete current user's profile."""
+    try:
+        result = delete_user_profile(current_user['id'])
+        return result
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Failed to delete profile",
+                "message": str(error)
+            }
+        )
+
+# ============================================================================
+# FINANCIAL PLAN GENERATION
+# ============================================================================
+
 # Generate financial plan (protected)
 @app.post("/api/generate-plan")
 async def generate_plan(
@@ -165,6 +231,9 @@ async def generate_plan(
     current_user: dict = Depends(get_current_user)
 ):
     try:
+        # Save user profile first
+        save_user_profile(current_user['id'], user_answers.dict())
+        
         # Get relevant context from financial playbook using RAG
         context = await get_relevant_context(user_answers.dict())
         
@@ -395,6 +464,10 @@ async def stream_query(
         try:
             print("[STREAM] Starting stream generation with function calling...")
             
+            # Get user profile summary for personalization
+            user_profile_summary = get_user_profile_summary(current_user.get('id'))
+            print(f"[STREAM] User profile: {user_profile_summary[:100]}...")
+            
             # Get relevant context from RAG if no specific context provided
             rag_context = ""
             if request.context:
@@ -405,39 +478,46 @@ async def stream_query(
                 print("[STREAM] No context provided, skipping RAG")
             
             # Build the conversation prompt with tool instructions
-            system_prompt = """You are a knowledgeable financial advisor assistant specializing in Malaysian personal finance.
+            system_prompt = f"""You are a knowledgeable financial advisor assistant specializing in Malaysian personal finance.
 You provide clear, actionable advice on financial planning, investments, retirement planning, and money management.
+
+{user_profile_summary}
 
 IMPORTANT: You have access to powerful retirement planning tools that you SHOULD USE when relevant:
 
-1. **get_investment_options**: Find suitable investment products based on risk tolerance, amount, and time horizon
+1. **get_user_financial_profile**: Retrieve detailed user financial profile with analysis
+   - Use when you need specific details about the user's financial situation
+   - Provides income, expenses, savings capacity, debt info, and personalized recommendations
+   
+2. **get_investment_options**: Find suitable investment products based on risk tolerance, amount, and time horizon
    - Use when users ask about investment options, what to invest in, or need recommendations
    
-2. **compare_investments**: Compare multiple investment products side by side
+3. **compare_investments**: Compare multiple investment products side by side
    - Use when users want to compare different investment options
    
-3. **calculate_retirement_projection**: Calculate retirement savings projections with future value
+4. **calculate_retirement_projection**: Calculate retirement savings projections with future value
    - Use when users ask about retirement planning, how much they'll have, or need projections
    
-4. **get_product_details**: Get detailed information about specific investment products
+5. **get_product_details**: Get detailed information about specific investment products
    - Use when users ask about a specific product or want more details
    
-5. **create_investment_order**: Help users purchase investments (use carefully, confirm intent first)
+6. **create_investment_order**: Help users purchase investments (use carefully, confirm intent first)
    - Use when users explicitly want to invest or purchase a product
 
 WHEN TO USE TOOLS:
-- User asks "What should I invest in?" → Use get_investment_options
+- User asks "What should I invest in?" → Use get_investment_options with their profile data
 - User asks "How much will I have at retirement?" → Use calculate_retirement_projection
 - User mentions age, savings, monthly amount → Proactively use calculate_retirement_projection
 - User asks about specific products → Use get_product_details
 - User wants to compare options → Use compare_investments
+- You need their exact financial details → Use get_user_financial_profile
 
 IMPORTANT: When you use a tool, explain what you're doing and present the results clearly.
 
 Guidelines:
 - Use Malaysian Ringgit (RM) currency
 - Be conversational and helpful
-- Provide specific, actionable advice
+- Provide specific, actionable advice tailored to the user's profile
 - Reference Malaysian financial context (EPF, KWSP, taxes, etc.) when relevant
 - Use the tools proactively to provide data-driven recommendations
 - Use markdown formatting for better readability
@@ -475,7 +555,7 @@ Guidelines:
                 conversation,
                 generation_config=genai.GenerationConfig(
                     temperature=0.7,
-                    max_output_tokens=2000,
+                    max_output_tokens=4000,  # Increased from 2000
                 ),
                 stream=True
             )
@@ -489,6 +569,11 @@ Guidelines:
                 # Check for function calls
                 if chunk.candidates and len(chunk.candidates) > 0:
                     candidate = chunk.candidates[0]
+                    
+                    # Check finish reason
+                    if hasattr(candidate, 'finish_reason') and candidate.finish_reason:
+                        print(f"[STREAM] Finish reason: {candidate.finish_reason}")
+                    
                     if candidate.content and candidate.content.parts:
                         for part in candidate.content.parts:
                             # Handle function call
@@ -507,9 +592,19 @@ Guidelines:
                                 
                                 print(f"[STREAM TOOL CALL] {tool_name} with params: {parameters}")
                                 
-                                # Send tool call notification to client
-                                tool_msg = f"\n\n🔧 *Using tool: {tool_name}*\n\n"
-                                data = json.dumps({"content": tool_msg})
+                                # Send tool call notification to client with better formatting
+                                tool_display_names = {
+                                    "get_user_financial_profile": "📊 Analyzing your financial profile",
+                                    "get_investment_options": "🔍 Finding suitable investment options",
+                                    "compare_investments": "⚖️ Comparing investment products",
+                                    "calculate_retirement_projection": "📈 Calculating retirement projection",
+                                    "get_product_details": "📋 Getting product details",
+                                    "create_investment_order": "💰 Creating investment order"
+                                }
+                                
+                                tool_display = tool_display_names.get(tool_name, f"🔧 Using tool: {tool_name}")
+                                tool_msg = f"\n\n*{tool_display}...*\n\n"
+                                data = json.dumps({"content": tool_msg, "toolCall": tool_name})
                                 yield f"data: {data}\n\n"
                                 
                                 # Execute the tool
@@ -526,19 +621,36 @@ Guidelines:
                                             )
                                         )]
                                     ),
+                                    generation_config=genai.GenerationConfig(
+                                        temperature=0.7,
+                                        max_output_tokens=4000,
+                                    ),
                                     stream=True
                                 )
                                 
                                 # Stream the follow-up response
                                 for follow_chunk in follow_up:
-                                    if follow_chunk.text:
-                                        chunk_count += 1
-                                        total_chars += len(follow_chunk.text)
-                                        if chunk_count <= 3:
-                                            print(f"[STREAM] Chunk {chunk_count}: {follow_chunk.text[:50]}...")
+                                    # Check if chunk has candidates and parts
+                                    if follow_chunk.candidates and len(follow_chunk.candidates) > 0:
+                                        follow_candidate = follow_chunk.candidates[0]
                                         
-                                        data = json.dumps({"content": follow_chunk.text})
-                                        yield f"data: {data}\n\n"
+                                        # Check finish reason
+                                        if hasattr(follow_candidate, 'finish_reason') and follow_candidate.finish_reason:
+                                            print(f"[STREAM] Follow-up finish reason: {follow_candidate.finish_reason}")
+                                        
+                                        if follow_candidate.content and follow_candidate.content.parts:
+                                            for follow_part in follow_candidate.content.parts:
+                                                # Only process text parts
+                                                if hasattr(follow_part, 'text') and follow_part.text:
+                                                    chunk_count += 1
+                                                    total_chars += len(follow_part.text)
+                                                    if chunk_count <= 3:
+                                                        print(f"[STREAM] Chunk {chunk_count}: {follow_part.text[:50]}...")
+                                                    elif chunk_count % 10 == 0:
+                                                        print(f"[STREAM] Chunk {chunk_count} (total chars: {total_chars})")
+                                                    
+                                                    data = json.dumps({"content": follow_part.text})
+                                                    yield f"data: {data}\n\n"
                             
                             # Handle regular text
                             elif hasattr(part, 'text') and part.text:

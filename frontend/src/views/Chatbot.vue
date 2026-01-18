@@ -40,18 +40,8 @@
       </v-menu>
     </v-app-bar>
 
-    <!-- Loading Overlay -->
-    <v-overlay :model-value="loading" class="loading-overlay" persistent>
-      <div class="loading-content">
-        <v-progress-circular
-          indeterminate
-          size="64"
-          color="white"
-          width="6"
-        ></v-progress-circular>
-        <div class="loading-text mt-4">{{ loadingMessage }}</div>
-      </div>
-    </v-overlay>
+    <!-- Loading Overlay - REMOVED -->
+    <!-- Loading is now shown inline in chat -->
 
     <v-row no-gutters style="height: calc(100vh - 64px);">
       <!-- Main Chat Area -->
@@ -124,7 +114,7 @@
 
           <!-- Streaming Message (while AI is responding) -->
           <v-slide-y-transition>
-            <div v-if="streaming && currentResponse" class="message-wrapper assistant-message mb-6">
+            <div v-if="streaming || loading" class="message-wrapper assistant-message mb-6">
               <div class="d-flex justify-start">
                 <img 
                   :src="robotIcon" 
@@ -132,11 +122,18 @@
                   class="robot-icon-small mr-2 mt-1"
                 />
                 <div class="assistant-bubble message-content-wrapper">
-                  <div v-html="formatMessage(currentResponse)" class="message-content"></div>
-                  <div class="typing-indicator mt-2">
-                    <span></span>
-                    <span></span>
-                    <span></span>
+                  <!-- Show current response if available -->
+                  <div v-if="currentResponse" v-html="formatMessage(currentResponse)" class="message-content"></div>
+                  
+                  <!-- Show loading status -->
+                  <div class="thinking-status">
+                    <span class="status-icon">{{ getStatusIcon() }}</span>
+                    <span class="status-text">{{ loadingMessage }}</span>
+                    <div class="typing-indicator">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -342,9 +339,19 @@ export default {
                 if (data.content) {
                   chunkCount++
                   
-                  // Check for tool usage indicators
-                  if (data.content.includes('🔧 Using tool:')) {
-                    this.loadingMessage = 'Using tools...'
+                  // Update loading message based on content
+                  if (data.toolCall) {
+                    const toolMessages = {
+                      'get_user_financial_profile': 'Analyzing your profile...',
+                      'get_investment_options': 'Finding investments...',
+                      'compare_investments': 'Comparing options...',
+                      'calculate_retirement_projection': 'Calculating projections...',
+                      'get_product_details': 'Getting details...',
+                      'create_investment_order': 'Creating order...'
+                    }
+                    this.loadingMessage = toolMessages[data.toolCall] || 'Using tools...'
+                  } else if (chunkCount === 1) {
+                    this.loadingMessage = 'Generating response...'
                   }
                   
                   if (chunkCount <= 5) {
@@ -497,6 +504,21 @@ export default {
       localStorage.removeItem('questionnaire_data')
       // Redirect to questionnaire
       this.router.push('/questionnaire')
+    },
+
+    getStatusIcon() {
+      const icons = {
+        'Thinking...': '',
+        'Analyzing your profile...': '',
+        'Finding investments...': '',
+        'Comparing options...': '',
+        'Calculating projections...': '',
+        'Getting details...': '',
+        'Creating order...': '',
+        'Using tools...': '',
+        'Generating response...': ''
+      }
+      return icons[this.loadingMessage] || ''
     }
   }
 }
@@ -517,25 +539,6 @@ export default {
 .messages-container {
   background: #f5f5f5;
   position: relative;
-}
-
-/* Loading Overlay */
-.loading-overlay {
-  background: rgba(102, 126, 234, 0.95) !important;
-}
-
-.loading-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.loading-text {
-  color: white;
-  font-size: 1.2em;
-  font-weight: 500;
-  letter-spacing: 0.5px;
 }
 
 /* Robot Icon Styling */
@@ -646,6 +649,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 4px;
+  margin-left: 8px;
 }
 
 .typing-indicator span {
@@ -673,6 +677,27 @@ export default {
     transform: translateY(-10px);
     opacity: 1;
   }
+}
+
+.thinking-status {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f5f5f5;
+  border-radius: 16px;
+  margin-top: 8px;
+  color: #666;
+  font-size: 0.95em;
+}
+
+.status-icon {
+  font-size: 1.2em;
+  margin-right: 8px;
+}
+
+.status-text {
+  font-weight: 500;
+  color: #555;
 }
 
 .input-area {

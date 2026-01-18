@@ -84,6 +84,18 @@ create_order_tool = genai.protos.FunctionDeclaration(
     )
 )
 
+get_user_profile_tool = genai.protos.FunctionDeclaration(
+    name="get_user_financial_profile",
+    description="Retrieve user's financial profile from questionnaire responses including income, expenses, debt, savings, risk tolerance, and personalized analysis. Use this to provide personalized advice based on their actual financial situation.",
+    parameters=genai.protos.Schema(
+        type=genai.protos.Type.OBJECT,
+        properties={
+            "user_id": genai.protos.Schema(type=genai.protos.Type.STRING, description="User identifier"),
+        },
+        required=["user_id"]
+    )
+)
+
 # Create tool collection
 retirement_tools = genai.protos.Tool(
     function_declarations=[
@@ -91,13 +103,14 @@ retirement_tools = genai.protos.Tool(
         compare_investments_tool,
         calculate_projection_tool,
         get_product_details_tool,
-        create_order_tool
+        create_order_tool,
+        get_user_profile_tool
     ]
 )
 
 # Initialize the model with tools
 model = genai.GenerativeModel(
-    'gemini-2.',
+    'gemini-2.5-flash',
     tools=[retirement_tools]
 )
 
