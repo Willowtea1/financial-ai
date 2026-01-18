@@ -1,5 +1,45 @@
 <template>
   <v-container fluid class="chatbot-container pa-0" style="height: 100vh;">
+    <!-- Top Navigation Bar -->
+    <v-app-bar elevation="1" color="white" density="comfortable">
+      <v-app-bar-title class="d-flex align-center">
+        <img :src="robotIcon" alt="AI" class="robot-icon-nav mr-2" />
+        <span class="font-weight-bold">Financial AI Assistant</span>
+      </v-app-bar-title>
+      
+      <v-spacer></v-spacer>
+      
+      <!-- User Menu -->
+      <v-menu>
+        <template v-slot:activator="{ props }">
+          <v-btn icon v-bind="props">
+            <v-icon>mdi-account-circle</v-icon>
+          </v-btn>
+        </template>
+        <v-list>
+          <v-list-item @click="clearChat">
+            <template v-slot:prepend>
+              <v-icon>mdi-delete-outline</v-icon>
+            </template>
+            <v-list-item-title>Clear Chat</v-list-item-title>
+          </v-list-item>
+          <v-list-item @click="retakeQuestionnaire">
+            <template v-slot:prepend>
+              <v-icon>mdi-clipboard-text-outline</v-icon>
+            </template>
+            <v-list-item-title>Retake Questionnaire</v-list-item-title>
+          </v-list-item>
+          <v-divider></v-divider>
+          <v-list-item @click="handleLogout">
+            <template v-slot:prepend>
+              <v-icon>mdi-logout</v-icon>
+            </template>
+            <v-list-item-title>Logout</v-list-item-title>
+          </v-list-item>
+        </v-list>
+      </v-menu>
+    </v-app-bar>
+
     <!-- Loading Overlay -->
     <v-overlay :model-value="loading" class="loading-overlay" persistent>
       <div class="loading-content">
@@ -13,7 +53,7 @@
       </div>
     </v-overlay>
 
-    <v-row no-gutters style="height: 100%;">
+    <v-row no-gutters style="height: calc(100vh - 64px);">
       <!-- Main Chat Area -->
       <v-col cols="12" style="height: 100%; display: flex; flex-direction: column;">
         <!-- Messages Area -->
@@ -156,6 +196,7 @@
 <script>
 import { supabase } from '../supabase'
 import { marked } from 'marked'
+import { useRouter } from 'vue-router'
 import robotIcon from '@/assets/images/robot-icon.png'
 
 // Configure marked for better table rendering
@@ -170,6 +211,10 @@ marked.setOptions({
 
 export default {
   name: 'Chatbot',
+  setup() {
+    const router = useRouter()
+    return { router }
+  },
   data() {
     return {
       robotIcon,
@@ -429,6 +474,29 @@ export default {
       this.snackbar.message = message
       this.snackbar.color = 'error'
       this.snackbar.show = true
+    },
+
+    async handleLogout() {
+      try {
+        await supabase.auth.signOut()
+        // Clear all local data
+        localStorage.removeItem('chatbot_history')
+        localStorage.removeItem('questionnaire_completed')
+        localStorage.removeItem('questionnaire_data')
+        // Redirect to landing page
+        this.router.push('/')
+      } catch (error) {
+        console.error('Logout error:', error)
+        this.showError('Failed to logout. Please try again.')
+      }
+    },
+
+    retakeQuestionnaire() {
+      // Clear questionnaire data but keep chat history
+      localStorage.removeItem('questionnaire_completed')
+      localStorage.removeItem('questionnaire_data')
+      // Redirect to questionnaire
+      this.router.push('/questionnaire')
     }
   }
 }
@@ -437,6 +505,13 @@ export default {
 <style scoped>
 .chatbot-container {
   background: #f5f5f5;
+}
+
+/* Navigation Bar */
+.robot-icon-nav {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .messages-container {
