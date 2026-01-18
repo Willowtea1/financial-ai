@@ -1,7 +1,7 @@
 {
   "name": "financial-gps",
   "version": "1.0.0",
-  "description": "Financial GPS - Personalised Financial Planning Web App",
+  "description": "Financial AI - Personalised Financial Planning Web App",
   "private": true,
   "scripts": {
     "install:frontend": "npm install --prefix frontend",

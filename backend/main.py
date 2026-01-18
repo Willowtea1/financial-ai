@@ -15,7 +15,7 @@ from config import get_settings
 
 load_dotenv()
 
-app = FastAPI(title="Financial GPS API", version="1.0.0")
+app = FastAPI(title="Financial AI API", version="1.0.0")
 
 # CORS middleware
 app.add_middleware(

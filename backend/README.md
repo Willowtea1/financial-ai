@@ -1,6 +1,6 @@
-# Financial GPS Backend (FastAPI)
+# Financial AI Backend (FastAPI)
 
-FastAPI backend for Financial GPS with RAG-powered financial planning.
+FastAPI backend for Financial AI with RAG-powered financial planning.
 
 ## Features
 
