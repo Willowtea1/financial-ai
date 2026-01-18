@@ -1,21 +1,167 @@
-# Financial AI - Personalised Financial Planning Web App
+# Financial GPS
 
-Get your personalised financial plan in 5 minutes using AI. This Vue 3 + FastAPI application helps Malaysian residents create comprehensive financial roadmaps based on their financial situation.
+**Your Personalized Financial Planner in 5 Minutes**
 
-## Features
+## Team Members
 
-- 🎯 **Landing Page** - Hero section with clear CTA
-- 📋 **Card-Based Questionnaire** - Interactive financial checkup with 6 sections
-- 🤖 **AI-Powered Plan Generation** - Uses OpenAI with RAG (Retrieval-Augmented Generation)
-- 📊 **Financial Planning Report** - Comprehensive plan with situation, priorities, roadmap, and strategies
-- 💬 **AI Refinement Chat** - Interactive chat modal to refine your plan with AI assistance
+- **Charles**
+- **Azfar**
+
+## Problem Statement
+
+Users are experiencing financial paralysis caused by a fragmented landscape of disconnected services. The high cost of professional advisors and the prevalence of generic, 'one-size-fits-all' tools prevent individuals from receiving the personalized guidance necessary to reach their financial goals.
+
+## Solution Overview
+
+Financial GPS is an AI-powered financial planning platform that provides personalized, actionable financial roadmaps tailored to Malaysian residents. By combining an intuitive questionnaire with advanced RAG (Retrieval-Augmented Generation) technology, we deliver comprehensive financial plans in minutes—not weeks.
+
+**Key Features:**
+- 📋 Interactive card-based financial assessment
+- 📄 Document upload with Docling OCR for automatic data extraction
+- 🤖 AI-powered plan generation using Gemini 2.5 Flash
+- 📊 Comprehensive financial reports with actionable strategies
+- 💬 AI chat refinement for personalized guidance
+- 🎯 Malaysian-specific financial advice (EPF, ASB, etc.)
 
 ## Tech Stack
 
 - **Frontend**: Vue 3, Vuetify 3, Vite, Vue Router
-- **Backend**: FastAPI (Python)
-- **AI**: OpenAI API (GPT-4o)
-- **RAG**: TF-IDF + Cosine Similarity for semantic search on markdown playbook
+- **Backend**: FastAPI (Python 3.11), Uvicorn
+- **AI**: Google Gemini 2.5 Flash with RAG
+- **Document Processing**: Docling for OCR and document extraction
+- **Database**: Supabase (PostgreSQL)
+- **Authentication**: Supabase Auth
+
+## Environment Variables
+
+### Backend Environment Variables
+
+Create a `backend/.env` file with the following variables:
+
+```env
+# Google Gemini API Configuration
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Supabase Configuration
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_KEY=your_supabase_anon_key
+
+# Server Configuration
+PORT=3001
+```
+
+### Frontend Environment Variables
+
+Create a `frontend/.env` file with the following variables:
+
+```env
+# Supabase Configuration
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Backend API URL
+VITE_API_URL=http://localhost:3001
+```
+
+## Setup Instructions
+
+### Prerequisites
+
+- **Node.js 18+** and npm
+- **Python 3.11**
+- **Google Gemini API key** ([Get one here](https://aistudio.google.com/app/apikey))
+- **Supabase account** ([Sign up here](https://supabase.com))
+
+### Step-by-Step Setup Guide
+
+#### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+cd financial-ai
+```
+
+#### 2. Backend Setup
+
+```bash
+# Navigate to backend directory
+cd backend
+
+# Create Python virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On macOS/Linux:
+source venv/bin/activate
+# On Windows:
+venv\Scripts\activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Create environment file
+cp .env.example .env
+
+# Edit .env and add your API keys
+# GEMINI_API_KEY=your_key_here
+# SUPABASE_URL=your_url_here
+# SUPABASE_KEY=your_key_here
+```
+
+#### 3. Frontend Setup
+
+```bash
+# Navigate to frontend directory (from project root)
+cd frontend
+
+# Install Node.js dependencies
+npm install
+
+# Create environment file
+cp .env.example .env
+
+# Edit .env and add your configuration
+# VITE_SUPABASE_URL=your_url_here
+# VITE_SUPABASE_ANON_KEY=your_key_here
+# VITE_API_URL=http://localhost:3001
+```
+
+#### 4. Start the Application
+
+Open two terminal windows:
+
+**Terminal 1 - Backend Server:**
+```bash
+cd backend
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+uvicorn main:app --reload --port 3001 or python -m uvicorn main:app --reload --port 3001
+```
+Backend will run on `http://localhost:3001`
+
+**Terminal 2 - Frontend Development Server:**
+```bash
+cd frontend
+npm run dev
+```
+Frontend will run on `http://localhost:5173`
+
+#### 5. Access the Application
+
+Open your browser and navigate to:
+```
+http://localhost:5173
+```
+
+You should see the Financial GPS landing page. Click "Start My Financial Plan" to begin!
+
+## How It Works
+
+1. **Landing Page**: Users are greeted with a clear value proposition and CTA
+2. **Financial Assessment**: Interactive 6-section questionnaire covering income, expenses, debt, savings, and risk tolerance
+3. **Document Upload**: Users can upload financial documents (PDFs, images) which are processed using Docling OCR
+4. **AI Plan Generation**: RAG system retrieves relevant financial guidance and Gemini 2.5 Flash generates a personalized plan
+5. **Comprehensive Report**: Users receive a detailed financial roadmap with immediate actions and long-term strategies
+6. **AI Refinement**: Interactive chat allows users to ask questions and refine their plan
 
 ## Project Structure
 
@@ -23,244 +169,29 @@ Get your personalised financial plan in 5 minutes using AI. This Vue 3 + FastAPI
 financial-gps/
 ├── frontend/                 # Vue 3 frontend application
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── Questionnaire.vue      # Card-based questionnaire component
-│   │   │   └── ChatModal.vue          # AI refinement chat modal
-│   │   ├── views/
-│   │   │   ├── LandingPage.vue        # Landing page with hero section
-│   │   │   ├── Questionnaire.vue      # Questionnaire route view
-│   │   │   └── FinancialPlan.vue      # Financial plan report page
-│   │   ├── router/
-│   │   │   └── index.js               # Vue Router configuration
-│   │   ├── plugins/
-│   │   │   └── vuetify.js             # Vuetify plugin setup
-│   │   ├── App.vue
-│   │   └── main.js
-│   ├── index.html
-│   ├── vite.config.js
+│   │   ├── components/      # Reusable Vue components
+│   │   ├── views/           # Page components
+│   │   ├── router/          # Vue Router configuration
+│   │   ├── plugins/         # Vuetify configuration
+│   │   └── utils/           # Utility functions (auth, etc.)
 │   └── package.json
 ├── backend/                  # FastAPI Python backend
-│   ├── services/
-│   │   ├── openai_service.py       # OpenAI API integration
-│   │   └── rag_service.py          # RAG/grounding service (TF-IDF + Cosine Similarity)
-│   ├── data/
-│   │   └── financial-playbook.md  # Financial guidance document
-│   ├── main.py                   # FastAPI server entry point
-│   ├── requirements.txt
-│   └── .env.example
-├── package.json              # Root package.json with workspace scripts
-├── .gitignore
+│   ├── services/            # Business logic services
+│   │   ├── gemini_service.py         # Gemini AI integration
+│   │   ├── rag_service.py            # RAG implementation
+│   │   ├── content_extraction.py     # Docling OCR service
+│   │   ├── retirement_tools.py       # Financial calculation tools
+│   │   └── user_profile_service.py   # User profile management
+│   ├── data/                # Financial playbook and documentation
+│   ├── main.py              # FastAPI entry point
+│   └── requirements.txt
 └── README.md
 ```
 
-## Setup Instructions
-
-### Prerequisites
-
-- **Node.js 18+** and npm (for frontend)
-- **Python 3.9+** (for backend)
-- **OpenAI API key**
-
-### Installation
-
-1. **Clone or navigate to the project directory**
-
-2. **Install frontend dependencies**
-   ```bash
-   cd frontend
-   npm install
-   cd ..
-   ```
-
-3. **Set up Python virtual environment and install backend dependencies**
-   ```bash
-   cd backend
-   
-   # Create virtual environment
-   python -m venv venv
-   
-   # Activate virtual environment
-   # Windows:
-   venv\Scripts\activate
-   # Linux/Mac:
-   source venv/bin/activate
-   
-   # Install Python dependencies
-   pip install -r requirements.txt
-   ```
-
-4. **Set up backend environment variables**
-   ```bash
-   # Copy the example file and edit it
-   cp .env.example .env
-   # Edit .env and add your OpenAI API key
-   OPENAI_API_KEY=your_openai_api_key_here
-   PORT=3001
-   ```
-
-5. **Start the development servers**
-
-   **Terminal 1 - Frontend (Vue App)**:
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-   This starts Vite dev server on `http://localhost:5173`
-
-   **Terminal 2 - Backend (FastAPI)**:
-   ```bash
-   cd backend
-   # Make sure venv is activated
-   python main.py
-   # OR: uvicorn main:app --reload --port 3001
-   ```
-   This starts FastAPI server on `http://localhost:3001`
-
-6. **Open your browser**
-   Navigate to `http://localhost:5173`
-
-## Usage
-
-1. **Landing Page**: Click "Start My Financial Plan" to begin
-2. **Questionnaire**: Select options for each financial category:
-   - About You
-   - Annual Income (RM)
-   - Monthly Expenses (RM)
-   - Debt
-   - Savings
-   - Risk Tolerance
-3. **Generate Plan**: Click "Generate My Financial Plan" once all sections are complete
-4. **View Report**: Review your personalised financial plan
-5. **Refine Plan**: Click "Refine My Plan with AI" to chat with AI and refine your plan
-
-## API Endpoints
-
-### POST `/api/generate-plan`
-Generates a financial plan based on user questionnaire responses.
-
-**Request Body:**
-```json
-{
-  "aboutYou": "Professional",
-  "income": "60,001–100,000",
-  "expenses": "2,501–4,000",
-  "debt": "Student loan",
-  "savings": "10k–50k",
-  "riskTolerance": "Medium"
-}
-```
-
-**Response:**
-```json
-{
-  "situation": "...",
-  "priorities": ["...", "...", "..."],
-  "roadmap": "...",
-  "thisMonthActions": "...",
-  "longTermStrategy": "..."
-}
-```
-
-### POST `/api/refine-plan`
-Refines plan through AI chat interaction.
-
-**Request Body:**
-```json
-{
-  "message": "How can I save more money?",
-  "planData": { ... },
-  "chatHistory": [ ... ]
-}
-```
-
-**Response:**
-```json
-{
-  "message": "...",
-  "updatedPlan": { ... } // Optional, if plan was updated
-}
-```
-
-### GET `/api/health`
-Health check endpoint.
-
 ## API Documentation
 
-FastAPI automatically generates interactive API documentation:
+FastAPI provides automatic interactive API documentation:
 
 - **Swagger UI**: `http://localhost:3001/docs`
-- **ReDoc**: `http://localhost:3001/redoc`
 
-## RAG System
 
-The app uses a hybrid RAG (Retrieval-Augmented Generation) system:
-
-1. **Financial Playbook**: Located in `backend/data/financial-playbook.md`
-2. **Chunking**: Playbook is split into text chunks (1500 chars, 300 overlap) with sentence boundary awareness
-3. **TF-IDF Vectorization**: Creates semantic embeddings for all chunks
-4. **Cosine Similarity**: Calculates semantic similarity between user query and chunks
-5. **Keyword Matching**: Additional relevance scoring based on user answers
-6. **Hybrid Scoring**: 70% semantic similarity + 30% keyword relevance
-7. **Context Retrieval**: Top 5 relevant chunks are retrieved and passed to OpenAI
-
-You can customize the playbook by editing `backend/data/financial-playbook.md`.
-
-## Customization
-
-### Update Financial Playbook
-Edit `backend/data/financial-playbook.md` to customize financial guidance.
-
-### Change OpenAI Model
-In `backend/services/openai_service.py`, change the model:
-```python
-model="gpt-4o"  # or 'gpt-4o-mini' for cost efficiency
-```
-
-### Styling
-Vuetify theme is configured in `frontend/src/plugins/vuetify.js`. Modify the theme object to change colors.
-
-## Production Build
-
-1. **Build frontend**
-   ```bash
-   cd frontend
-   npm run build
-   ```
-
-2. **Start production backend server**
-   ```bash
-   cd backend
-   # Activate venv
-   uvicorn main:app --host 0.0.0.0 --port 3001
-   ```
-
-3. **Serve static files** - The `frontend/dist` folder contains the built files. Serve them through a reverse proxy like Nginx or configure FastAPI to serve static files.
-
-## Environment Variables
-
-### Backend (`backend/.env`)
-- `OPENAI_API_KEY`: Your OpenAI API key (required)
-- `PORT`: Backend server port (default: 3001)
-
-## Development Scripts
-
-### Frontend (`frontend/`)
-- `npm run dev` - Start Vite dev server
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build
-
-### Backend (`backend/`)
-- `python main.py` - Start FastAPI server (development mode with auto-reload)
-- `uvicorn main:app --reload --port 3001` - Alternative way to start server
-
-## Notes
-
-- The app uses OpenAI's GPT-4o model by default (can be changed to gpt-4o-mini for lower costs)
-- RAG system uses TF-IDF + Cosine Similarity for semantic search (can be enhanced with FAISS or embeddings for production)
-- All currency references are in Malaysian Ringgit (RM)
-- Financial guidance is tailored for Malaysian residents (EPF, ASB, etc.)
-- FastAPI provides automatic API documentation at `/docs` endpoint
-
-## License
-
-MIT
