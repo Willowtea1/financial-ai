@@ -1,10 +1,10 @@
 <template>
-  <v-container class="py-8 px-4">
+  <v-container fluid class="py-8 px-4">
     <!-- Header -->
     <v-row>
       <v-col cols="12" class="text-center mb-6">
-        <h2 class="text-h3 font-weight-bold mb-3">Financial Checkup</h2>
-        <p class="text-body-large text-medium-emphasis">
+        <h2 class="text-h3 font-weight-bold mb-3 text-white">Financial Checkup</h2>
+        <p class="text-body-large text-medium-emphasis text-white">
           Select options that best describe your financial situation
         </p>
       </v-col>
@@ -57,22 +57,21 @@
     </v-row>
 
     <!-- Generate Button -->
-<v-btn
-  size="x-large"
-  color="primary"
-  :disabled="!isFormComplete"
-  @click="generatePlan"
-  class="generate-button floating-btn"
-  elevation="8"
-  rounded="xl"
->
-  <v-icon start size="28">mdi-rocket-launch</v-icon>
-  Generate My Financial Plan
-  <v-tooltip activator="parent" location="top" v-if="!isFormComplete">
-    Please complete all sections
-  </v-tooltip>
-</v-btn>
-
+    <v-btn
+      size="x-large"
+      color="primary"
+      :disabled="!isFormComplete"
+      @click="generatePlan"
+      class="generate-button floating-btn"
+      elevation="8"
+      rounded="xl"
+    >
+      <v-icon start size="28">mdi-rocket-launch</v-icon>
+      Generate My Financial Plan
+      <v-tooltip activator="parent" location="top" v-if="!isFormComplete">
+        Please complete all sections
+      </v-tooltip>
+    </v-btn>
   </v-container>
 </template>
 
@@ -93,7 +92,7 @@ const formData = ref({
 })
 
 const sectionLabels = {
-  aboutYou: 'About You',
+  aboutYou: 'Occupation',
   income: 'Income (per year, RM)',
   expenses: 'Expenses (per month, RM)',
   debt: 'Debt',
@@ -127,8 +126,38 @@ const generatePlan = async () => {
 </script>
 
 <style scoped>
-/* Card styling */
+/* ---------------------- Modern Animated Background ---------------------- */
+.v-container {
+  position: relative;
+  overflow: hidden;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* Animated floating circles for modern effect */
+.v-container::before {
+  content: "";
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: -50%;
+  left: -50%;
+  background: radial-gradient(circle at 20% 30%, rgba(255,255,255,0.1) 0%, transparent 50%),
+              radial-gradient(circle at 80% 70%, rgba(255,255,255,0.1) 0%, transparent 50%);
+  animation: floatBackground 30s linear infinite;
+  z-index: 0;
+}
+
+@keyframes floatBackground {
+  0% { transform: rotate(0deg) translate(0, 0); }
+  50% { transform: rotate(180deg) translate(50px, -50px); }
+  100% { transform: rotate(360deg) translate(0, 0); }
+}
+
+/* ---------------------- Cards & Buttons Stay Above Background ---------------------- */
 .question-section-card {
+  position: relative;
+  z-index: 1;
   min-height: 280px;
   transition: all 0.3s ease;
 }
@@ -139,7 +168,6 @@ const generatePlan = async () => {
   font-weight: 600;
 }
 
-/* Fix horizontal scroll issue */
 .option-toggle-group {
   display: flex !important;
   flex-direction: column !important;
@@ -155,7 +183,6 @@ const generatePlan = async () => {
   justify-content: center;
 }
 
-/* Selected button styles */
 :deep(.option-toggle-group .v-btn--selected) {
   background-color: rgb(var(--v-theme-primary)) !important;
   color: white !important;
@@ -163,10 +190,10 @@ const generatePlan = async () => {
 }
 
 .floating-btn {
-  position: fixed;     /* fix to viewport */
-  bottom: 24px;        /* distance from bottom */
-  right: 24px;         /* distance from right edge */
-  z-index: 1000;
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1;
   min-width: 280px;
   font-weight: 600;
   letter-spacing: 0.5px;

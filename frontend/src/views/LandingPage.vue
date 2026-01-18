@@ -2,10 +2,10 @@
   <v-container fluid class="pa-0">
     <v-row no-gutters class="hero-section" justify="center" align="center">
       <v-col cols="12" md="8" lg="6" class="text-center pa-8">
-        <h1 class="text-h3 text-md-h2 font-weight-bold mb-4 white--text">
+        <h1 class="text-h3 text-md-h2 font-weight-bold mb-4 text-white">
           Get your personalised financial plan in 5 minutes.
         </h1>
-        <p class="text-h6 text-md-h5 mb-8 white--text">
+        <p class="text-h6 text-md-h5 mb-8 text-black">
           Answer a few questions and let AI build your financial roadmap.
         </p>
         <v-btn

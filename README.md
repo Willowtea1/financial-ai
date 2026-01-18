@@ -1,4 +1,4 @@
-# Financial GPS - Personalised Financial Planning Web App
+# Financial AI - Personalised Financial Planning Web App
 
 Get your personalised financial plan in 5 minutes using AI. This Vue 3 + FastAPI application helps Malaysian residents create comprehensive financial roadmaps based on their financial situation.
 

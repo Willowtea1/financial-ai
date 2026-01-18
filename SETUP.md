@@ -1,4 +1,4 @@
-# Quick Setup Guide - Financial GPS
+# Quick Setup Guide - Financial AI
 
 ## Prerequisites
 
