@@ -3,6 +3,7 @@ import { supabase } from '../supabase'
 import LandingPage from '../views/LandingPage.vue'
 import Questionnaire from '../views/Questionnaire.vue'
 import Chatbot from '../views/Chatbot.vue'
+import PaymentGateway from '../views/PaymentGateway.vue'
 
 const routes = [
   {
@@ -22,6 +23,12 @@ const routes = [
     name: 'Chatbot',
     component: Chatbot,
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/payment-gateway',
+    name: 'PaymentGateway',
+    component: PaymentGateway,
+    meta: { requiresAuth: false }  // Allow access without auth for demo
   },
   // Redirect old routes to new structure
   {

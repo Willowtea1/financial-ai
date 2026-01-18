@@ -432,10 +432,164 @@ def create_investment_order(
             "Receive confirmation email",
             "Investment will be processed within 2-3 business days",
             "View investment in your portfolio dashboard"
-        ]
+        ],
+        # Add action card data for frontend
+        "action_card": {
+            "type": "investment",
+            "title": f"Invest in {product['name']}",
+            "description": f"Ready to invest RM {amount:,.2f} in {product['name']}?",
+            "data": {
+                "productName": product['name'],
+                "productId": product_id,
+                "amount": amount,
+                "expectedReturn": product['returns']['average_5yr'],
+                "riskLevel": product['risk_level'].capitalize(),
+                "provider": product['provider']
+            }
+        }
     }
     
     return order
+
+
+def create_epf_topup_action(amount: float, user_id: str) -> Dict:
+    """
+    Create an EPF top-up action card.
+    
+    Args:
+        amount: Top-up amount in RM
+        user_id: User identifier
+    
+    Returns:
+        EPF top-up action details
+    """
+    # Calculate tax relief (max RM 4,000 for EPF top-up)
+    max_tax_relief = 4000
+    tax_relief = min(amount, max_tax_relief)
+    
+    action_id = f"EPF-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    
+    return {
+        "success": True,
+        "action_id": action_id,
+        "action_card": {
+            "type": "epf_topup",
+            "title": "EPF Voluntary Contribution",
+            "description": f"Top up your EPF Account 1 with RM {amount:,.2f} and enjoy tax relief!",
+            "data": {
+                "amount": amount,
+                "taxRelief": tax_relief,
+                "maxTaxRelief": max_tax_relief,
+                "account": "Account 1",
+                "method": "Online Banking"
+            }
+        },
+        "payment_url": f"https://secure.kwsp.gov.my/topup/{action_id}",
+        "benefits": [
+            f"Tax relief up to RM {tax_relief:,.2f}",
+            "Guaranteed returns (5.5% dividend in 2023)",
+            "Retirement savings boost",
+            "Compound interest growth"
+        ]
+    }
+
+
+def create_insurance_recommendation(coverage_amount: float, user_profile: Dict) -> Dict:
+    """
+    Create insurance recommendation action cards.
+    
+    Args:
+        coverage_amount: Desired coverage amount in RM
+        user_profile: User's financial profile
+    
+    Returns:
+        Insurance recommendations with action cards
+    """
+    # Mock insurance products (in production, integrate with real insurance APIs)
+    insurance_products = [
+        {
+            "id": "life_basic",
+            "name": "Life Protection Plus",
+            "provider": "Great Eastern",
+            "coverage": coverage_amount,
+            "premium": coverage_amount * 0.002,  # 0.2% of coverage
+            "benefits": ["Death benefit", "TPD coverage", "Critical illness rider"],
+            "term": "20 years"
+        },
+        {
+            "id": "life_premium",
+            "name": "Comprehensive Life Shield",
+            "provider": "Prudential",
+            "coverage": coverage_amount,
+            "premium": coverage_amount * 0.0035,  # 0.35% of coverage
+            "benefits": ["Death benefit", "TPD coverage", "Critical illness", "Medical card", "Investment component"],
+            "term": "25 years"
+        }
+    ]
+    
+    action_cards = []
+    for product in insurance_products:
+        action_cards.append({
+            "type": "insurance",
+            "title": product["name"],
+            "description": f"Get RM {coverage_amount:,.0f} coverage for just RM {product['premium']:,.2f}/month",
+            "data": {
+                "productId": product["id"],
+                "productName": product["name"],
+                "provider": product["provider"],
+                "coverage": coverage_amount,
+                "premium": product["premium"],
+                "benefits": product["benefits"],
+                "term": product["term"]
+            }
+        })
+    
+    return {
+        "success": True,
+        "recommendations": action_cards,
+        "message": f"Found {len(action_cards)} insurance options matching your needs"
+    }
+
+
+def create_savings_goal_action(goal_name: str, target_amount: float, months: int) -> Dict:
+    """
+    Create a savings goal action card.
+    
+    Args:
+        goal_name: Name of the savings goal
+        target_amount: Target amount in RM
+        months: Number of months to reach goal
+    
+    Returns:
+        Savings goal action details
+    """
+    monthly_amount = target_amount / months
+    
+    action_id = f"GOAL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    
+    return {
+        "success": True,
+        "action_id": action_id,
+        "action_card": {
+            "type": "savings_goal",
+            "title": f"Savings Goal: {goal_name}",
+            "description": f"Save RM {monthly_amount:,.2f} monthly to reach your goal of RM {target_amount:,.2f}",
+            "data": {
+                "goalName": goal_name,
+                "targetAmount": target_amount,
+                "monthlyAmount": monthly_amount,
+                "months": months,
+                "startDate": datetime.now().isoformat(),
+                "endDate": (datetime.now().replace(month=datetime.now().month + months)).isoformat()
+            }
+        },
+        "auto_debit": {
+            "enabled": True,
+            "amount": monthly_amount,
+            "frequency": "monthly",
+            "day_of_month": 1
+        }
+    }
 
 
 def get_product_details(product_id: str) -> Dict:
@@ -609,7 +763,10 @@ TOOL_FUNCTIONS = {
     "calculate_retirement_projection": calculate_retirement_projection,
     "get_product_details": get_product_details,
     "create_investment_order": create_investment_order,
-    "get_user_financial_profile": get_user_financial_profile
+    "get_user_financial_profile": get_user_financial_profile,
+    "create_epf_topup_action": create_epf_topup_action,
+    "create_insurance_recommendation": create_insurance_recommendation,
+    "create_savings_goal_action": create_savings_goal_action
 }
 
 

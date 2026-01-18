@@ -11,6 +11,7 @@ import httpx
 import json
 import traceback
 import google.generativeai as genai
+from datetime import datetime
 from services.gemini_service import generate_financial_plan, refine_financial_plan
 from services.rag_service import get_relevant_context
 from services.content_extraction import extract_content, summarize_document
@@ -20,6 +21,9 @@ from services.retirement_tools import (
     calculate_retirement_projection,
     get_product_details,
     create_investment_order,
+    create_epf_topup_action,
+    create_insurance_recommendation,
+    create_savings_goal_action,
     INVESTMENT_PRODUCTS
 )
 from services.user_profile_service import (
@@ -92,6 +96,11 @@ class QueryRequest(BaseModel):
     query: str
     chat_history: Optional[List[Dict]] = []
     context: Optional[Dict] = None
+
+class ExecuteActionRequest(BaseModel):
+    action_id: str | int  # Accept both string and int
+    action_type: str
+    data: Dict
 
 # Health check
 @app.get("/api/health")
@@ -613,7 +622,7 @@ Guidelines:
                                     parameters[key] = value
                                 
                                 # Add user_id if the tool needs it
-                                if tool_name == "create_investment_order":
+                                if tool_name in ["create_investment_order", "create_epf_topup_action"]:
                                     parameters["user_id"] = current_user.get('id')
                                 
                                 print(f"[STREAM TOOL CALL] {tool_name} with params: {parameters}")
@@ -625,7 +634,10 @@ Guidelines:
                                     "compare_investments": "⚖️ Comparing investment products",
                                     "calculate_retirement_projection": "📈 Calculating retirement projection",
                                     "get_product_details": "📋 Getting product details",
-                                    "create_investment_order": "💰 Creating investment order"
+                                    "create_investment_order": "💰 Creating investment order",
+                                    "create_epf_topup_action": "🏦 Preparing EPF top-up",
+                                    "create_insurance_recommendation": "🛡️ Finding insurance options",
+                                    "create_savings_goal_action": "🎯 Setting up savings goal"
                                 }
                                 
                                 tool_display = tool_display_names.get(tool_name, f"🔧 Using tool: {tool_name}")
@@ -636,6 +648,16 @@ Guidelines:
                                 # Execute the tool
                                 tool_result = execute_tool(tool_name, parameters)
                                 print(f"[STREAM TOOL RESULT] {str(tool_result)[:200]}...")
+                                
+                                # Check if tool result contains action_card
+                                if isinstance(tool_result, dict) and 'action_card' in tool_result:
+                                    print(f"[STREAM] Action card detected: {tool_result['action_card']['type']}")
+                                    # Send action card to frontend
+                                    action_card_data = json.dumps({
+                                        "action_card": tool_result['action_card'],
+                                        "content": ""  # Empty content, action card will be displayed separately
+                                    })
+                                    yield f"data: {action_card_data}\n\n"
                                 
                                 # Send tool result back to model and continue streaming
                                 follow_up = chat.send_message(
@@ -956,6 +978,144 @@ async def upload_files(
             status_code=500,
             detail={
                 "error": "Failed to upload files",
+                "message": str(error)
+            }
+        )
+
+# ============================================================================
+# ACTION EXECUTION ENDPOINT
+# ============================================================================
+
+@app.post("/api/execute-action")
+async def execute_action(
+    request: ExecuteActionRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Execute a financial action approved by user.
+    Handles investment purchases, EPF top-ups, insurance purchases, and savings goals.
+    """
+    try:
+        action_type = request.action_type
+        data = request.data
+        user_id = current_user['id']
+        
+        print(f"[EXECUTE ACTION] Type: {action_type}, User: {user_id}")
+        print(f"[EXECUTE ACTION] Data: {data}")
+        
+        result = {}
+        
+        if action_type == 'investment':
+            # Process investment purchase
+            result = create_investment_order(
+                product_id=data.get('productId'),
+                amount=data.get('amount'),
+                user_id=user_id,
+                payment_method=data.get('paymentMethod', 'online_banking')
+            )
+            
+            # Save to database
+            try:
+                supabase = get_supabase_client()
+                supabase.table('investment_orders').insert({
+                    'user_id': user_id,
+                    'order_id': result.get('order_id'),
+                    'product_id': data.get('productId'),
+                    'amount': data.get('amount'),
+                    'status': result.get('status'),
+                    'order_data': result
+                }).execute()
+            except Exception as db_error:
+                print(f"[EXECUTE ACTION] DB save failed: {db_error}")
+            
+        elif action_type == 'epf_topup':
+            # Process EPF top-up
+            result = create_epf_topup_action(
+                amount=data.get('amount'),
+                user_id=user_id
+            )
+            
+            # In production, this would integrate with EPF's API
+            # For now, return the payment URL
+            result['message'] = 'EPF top-up initiated. Redirecting to payment portal...'
+            
+        elif action_type == 'insurance':
+            # Process insurance purchase
+            # In production, this would integrate with insurance provider's API
+            result = {
+                'success': True,
+                'policy_number': f"POL-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                'product_id': data.get('productId'),
+                'coverage': data.get('coverage'),
+                'premium': data.get('premium'),
+                'status': 'active',
+                'message': 'Insurance policy activated successfully!'
+            }
+            
+            # Save to database
+            try:
+                supabase = get_supabase_client()
+                supabase.table('insurance_policies').insert({
+                    'user_id': user_id,
+                    'policy_number': result['policy_number'],
+                    'product_id': data.get('productId'),
+                    'coverage': data.get('coverage'),
+                    'premium': data.get('premium'),
+                    'status': 'active',
+                    'policy_data': result
+                }).execute()
+            except Exception as db_error:
+                print(f"[EXECUTE ACTION] DB save failed: {db_error}")
+            
+        elif action_type == 'savings_goal':
+            # Set up savings goal
+            result = create_savings_goal_action(
+                goal_name=data.get('goalName'),
+                target_amount=data.get('targetAmount'),
+                months=data.get('months')
+            )
+            
+            # Save to database
+            try:
+                supabase = get_supabase_client()
+                supabase.table('savings_goals').insert({
+                    'user_id': user_id,
+                    'goal_id': result.get('action_id'),
+                    'goal_name': data.get('goalName'),
+                    'target_amount': data.get('targetAmount'),
+                    'monthly_amount': data.get('monthlyAmount'),
+                    'months': data.get('months'),
+                    'status': 'active',
+                    'goal_data': result
+                }).execute()
+            except Exception as db_error:
+                print(f"[EXECUTE ACTION] DB save failed: {db_error}")
+            
+            result['message'] = 'Savings goal created successfully!'
+        
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown action type: {action_type}"
+            )
+        
+        print(f"[EXECUTE ACTION] Success: {result.get('success', False)}")
+        return {
+            "success": True,
+            "result": result,
+            "action_id": request.action_id,
+            "action_type": action_type
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as error:
+        print(f"[EXECUTE ACTION] Error: {error}")
+        print(f"[EXECUTE ACTION] Traceback:\n{traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Failed to execute action",
                 "message": str(error)
             }
         )

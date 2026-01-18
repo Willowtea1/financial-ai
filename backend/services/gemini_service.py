@@ -96,6 +96,46 @@ get_user_profile_tool = genai.protos.FunctionDeclaration(
     )
 )
 
+create_epf_topup_tool = genai.protos.FunctionDeclaration(
+    name="create_epf_topup_action",
+    description="Create an EPF voluntary contribution action with tax relief calculation. Use when users want to top up EPF, save on taxes, or maximize tax relief.",
+    parameters=genai.protos.Schema(
+        type=genai.protos.Type.OBJECT,
+        properties={
+            "amount": genai.protos.Schema(type=genai.protos.Type.NUMBER, description="Top-up amount in RM"),
+            "user_id": genai.protos.Schema(type=genai.protos.Type.STRING, description="User identifier"),
+        },
+        required=["amount", "user_id"]
+    )
+)
+
+create_insurance_tool = genai.protos.FunctionDeclaration(
+    name="create_insurance_recommendation",
+    description="Create insurance recommendation action cards with coverage options. Use when users need insurance, want protection, or ask about coverage.",
+    parameters=genai.protos.Schema(
+        type=genai.protos.Type.OBJECT,
+        properties={
+            "coverage_amount": genai.protos.Schema(type=genai.protos.Type.NUMBER, description="Desired coverage amount in RM"),
+            "user_profile": genai.protos.Schema(type=genai.protos.Type.OBJECT, description="User's financial profile"),
+        },
+        required=["coverage_amount", "user_profile"]
+    )
+)
+
+create_savings_goal_tool = genai.protos.FunctionDeclaration(
+    name="create_savings_goal_action",
+    description="Create a savings goal action with auto-debit setup. Use when users want to save for a specific goal or set up automatic savings.",
+    parameters=genai.protos.Schema(
+        type=genai.protos.Type.OBJECT,
+        properties={
+            "goal_name": genai.protos.Schema(type=genai.protos.Type.STRING, description="Name of the savings goal"),
+            "target_amount": genai.protos.Schema(type=genai.protos.Type.NUMBER, description="Target amount in RM"),
+            "months": genai.protos.Schema(type=genai.protos.Type.INTEGER, description="Number of months to reach goal"),
+        },
+        required=["goal_name", "target_amount", "months"]
+    )
+)
+
 # Create tool collection
 retirement_tools = genai.protos.Tool(
     function_declarations=[
@@ -104,7 +144,10 @@ retirement_tools = genai.protos.Tool(
         calculate_projection_tool,
         get_product_details_tool,
         create_order_tool,
-        get_user_profile_tool
+        get_user_profile_tool,
+        create_epf_topup_tool,
+        create_insurance_tool,
+        create_savings_goal_tool
     ]
 )
 
