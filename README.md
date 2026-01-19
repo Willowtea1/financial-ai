@@ -44,13 +44,15 @@ Create a `backend/.env` file with the following variables:
 ```env
 # Google Gemini API Configuration
 GEMINI_API_KEY=your_gemini_api_key_here
+PORT=8000
 
 # Supabase Configuration
 SUPABASE_URL=your_supabase_project_url
 SUPABASE_KEY=your_supabase_anon_key
+SUPABASE_JWT_SECRET=your_supabase_jwt_secret_key
 
-# Server Configuration
-PORT=3001
+# Cloudflare Worker Configuration
+WORKER_URL=your_cloudflare_url_that_accept_pdf_upload
 ```
 
 ### Frontend Environment Variables
@@ -61,9 +63,8 @@ Create a `frontend/.env` file with the following variables:
 # Supabase Configuration
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-
-# Backend API URL
-VITE_API_URL=http://localhost:3001
+VITE_API_BASE_URL=your_backend_url
+VITE_API_URL=your_backend_url
 ```
 
 ## Setup Instructions
